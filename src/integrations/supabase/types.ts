@@ -14,16 +14,211 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      daily_stock: {
+        Row: {
+          cantidad_disponible: number
+          created_at: string
+          fecha: string
+          id: string
+          product_id: string
+          updated_at: string
+        }
+        Insert: {
+          cantidad_disponible?: number
+          created_at?: string
+          fecha: string
+          id?: string
+          product_id: string
+          updated_at?: string
+        }
+        Update: {
+          cantidad_disponible?: number
+          created_at?: string
+          fecha?: string
+          id?: string
+          product_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_stock_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          activo: boolean
+          categoria: Database["public"]["Enums"]["product_category"]
+          created_at: string
+          descripcion: string | null
+          etiquetas: string[] | null
+          id: string
+          imagen_url: string | null
+          nombre: string
+          precio: number
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          activo?: boolean
+          categoria: Database["public"]["Enums"]["product_category"]
+          created_at?: string
+          descripcion?: string | null
+          etiquetas?: string[] | null
+          id?: string
+          imagen_url?: string | null
+          nombre: string
+          precio: number
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          activo?: boolean
+          categoria?: Database["public"]["Enums"]["product_category"]
+          created_at?: string
+          descripcion?: string | null
+          etiquetas?: string[] | null
+          id?: string
+          imagen_url?: string | null
+          nombre?: string
+          precio?: number
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          nombre: string
+          role: Database["public"]["Enums"]["user_role"]
+          telefono: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nombre: string
+          role?: Database["public"]["Enums"]["user_role"]
+          telefono?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nombre?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          telefono?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      reservation_items: {
+        Row: {
+          cantidad: number
+          created_at: string
+          id: string
+          precio_unitario: number
+          product_id: string
+          reservation_id: string
+          subtotal: number
+        }
+        Insert: {
+          cantidad: number
+          created_at?: string
+          id?: string
+          precio_unitario: number
+          product_id: string
+          reservation_id: string
+          subtotal: number
+        }
+        Update: {
+          cantidad?: number
+          created_at?: string
+          id?: string
+          precio_unitario?: number
+          product_id?: string
+          reservation_id?: string
+          subtotal?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservation_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservation_items_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reservations: {
+        Row: {
+          codigo: string
+          created_at: string
+          estado: Database["public"]["Enums"]["reservation_status"]
+          fecha_recogida: string
+          franja_horaria: string
+          id: string
+          notas: string | null
+          total: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          codigo: string
+          created_at?: string
+          estado?: Database["public"]["Enums"]["reservation_status"]
+          fecha_recogida: string
+          franja_horaria: string
+          id?: string
+          notas?: string | null
+          total?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          codigo?: string
+          created_at?: string
+          estado?: Database["public"]["Enums"]["reservation_status"]
+          fecha_recogida?: string
+          franja_horaria?: string
+          id?: string
+          notas?: string | null
+          total?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_reservation_code: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
     }
     Enums: {
-      [_ in never]: never
+      product_category: "PANES" | "BOLLERIA" | "TARTAS" | "ESPECIALES"
+      reservation_status: "PENDIENTE" | "PREPARADO" | "RETIRADO" | "CANCELADO"
+      user_role: "guest" | "customer" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +345,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      product_category: ["PANES", "BOLLERIA", "TARTAS", "ESPECIALES"],
+      reservation_status: ["PENDIENTE", "PREPARADO", "RETIRADO", "CANCELADO"],
+      user_role: ["guest", "customer", "admin"],
+    },
   },
 } as const
