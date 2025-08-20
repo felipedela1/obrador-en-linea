@@ -1,0 +1,1 @@
+[debug] test file for supabase insert logging

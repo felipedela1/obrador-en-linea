@@ -2,43 +2,55 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { HeroButton } from "@/components/ui/hero-button"
 import { Leaf, Star, Clock } from "lucide-react"
-import croissantsImage from "@/assets/croissants.jpg"
-import sourdoughImage from "@/assets/sourdough.jpg"
-import cheesecakeImage from "@/assets/cheesecake.jpg"
+import { useEffect, useState } from "react"
+import { supabase } from "@/integrations/supabase/client"
+import type { ProductRow } from "@/types/models"
+
+// Perf log helper (solo en dev)
+const logPerf = (label: string, info: Record<string, any>) => {
+  if (!import.meta.env.DEV) return
+  const ts = new Date().toISOString()
+  // eslint-disable-next-line no-console
+  console.log(`[PERF][${ts}] ${label}`, info)
+}
 
 const FeaturedProducts = () => {
-  const products = [
-    {
-      name: "Croissants Artesanales",
-      category: "Bollería",
-      price: "2,50",
-      image: croissantsImage,
-      description: "Laminado perfecto con mantequilla francesa, fermentación de 12 horas",
-      tags: ["Recién horneado", "Mantequilla premium"],
-      rating: 4.9,
-      available: true
-    },
-    {
-      name: "Pan de Masa Madre",
-      category: "Panes",
-      price: "4,80",
-      image: sourdoughImage,
-      description: "Fermentación natural de 24 horas, corteza crujiente, miga alveolada",
-      tags: ["Masa madre", "Ecológico"],
-      rating: 5.0,
-      available: true
-    },
-    {
-      name: "Tarta de Queso Artesana",
-      category: "Tartas",
-      price: "18,00",
-      image: cheesecakeImage,
-      description: "Queso cremoso, base de galleta casera, frutos rojos de temporada",
-      tags: ["Hecho a medida", "Frutos rojos"],
-      rating: 4.8,
-      available: false
+  const [products, setProducts] = useState<ProductRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [slow, setSlow] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const slowTimer = setTimeout(() => { if (!cancelled && loading) setSlow(true) }, 1200)
+
+    const fetchProducts = async () => {
+      setLoading(true)
+      const t0 = performance.now()
+      logPerf("products.featured.fetch.start", {})
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("activo", true)
+        .eq("destacado", true)
+        .order("nombre", { ascending: true })
+        .limit(3)
+      const t1 = performance.now()
+      logPerf("products.featured.fetch.end", {
+        duration_ms: +(t1 - t0).toFixed(1),
+        hadError: !!error,
+        errorMessage: error?.message,
+        count: data?.length || 0
+      })
+      if (!error && data && !cancelled) setProducts(data)
+      if (!cancelled) setLoading(false)
     }
-  ]
+
+    fetchProducts()
+    return () => {
+      cancelled = true
+      clearTimeout(slowTimer)
+    }
+  }, [])
 
   return (
     <section className="py-20 bg-gradient-warm">
@@ -59,26 +71,31 @@ const FeaturedProducts = () => {
 
         {/* Products Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
-          {products.map((product, index) => (
-            <Card key={index} className="group overflow-hidden border-0 bg-card/60 backdrop-blur-sm hover:shadow-glow transition-all duration-500">
+          {loading ? (
+            <div className="col-span-3 text-center text-muted-foreground">Cargando productos{slow && " (tardando más de lo normal)..."}</div>
+          ) : products.length === 0 ? (
+            <div className="col-span-3 text-center text-muted-foreground">No hay productos destacados</div>
+          ) : products.map((product) => (
+            <Card key={product.id} className="group overflow-hidden border-0 bg-card/60 backdrop-blur-sm hover:shadow-glow transition-all duration-500">
               <div className="relative overflow-hidden">
-                <img 
-                  src={product.image} 
-                  alt={product.name}
-                  className="w-full h-64 object-cover group-hover:scale-110 transition-transform duration-500"
-                />
+                {product.imagen_url ? (
+                  <img 
+                    src={product.imagen_url} 
+                    alt={product.nombre}
+                    className="w-full h-64 object-cover group-hover:scale-110 transition-transform duration-500"
+                  />
+                ) : (
+                  <div className="w-full h-64 bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center">
+                    <div className="text-6xl opacity-20">🥖</div>
+                  </div>
+                )}
                 <div className="absolute top-4 left-4">
                   <Badge variant="secondary" className="bg-white/90 text-foreground">
-                    {product.category}
+                    {product.categoria}
                   </Badge>
                 </div>
-                <div className="absolute top-4 right-4">
-                  <div className="flex items-center gap-1 bg-white/90 px-2 py-1 rounded-full text-sm">
-                    <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                    <span className="font-medium">{product.rating}</span>
-                  </div>
-                </div>
-                {!product.available && (
+                {/* Aquí podrías mostrar rating si lo tienes en la tabla */}
+                {!product.activo && (
                   <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                     <Badge variant="destructive" className="text-sm">
                       Próximamente
@@ -90,19 +107,19 @@ const FeaturedProducts = () => {
               <CardContent className="p-6">
                 <div className="flex items-start justify-between mb-3">
                   <h3 className="text-xl font-bold text-foreground group-hover:text-primary transition-colors">
-                    {product.name}
+                    {product.nombre}
                   </h3>
                   <div className="text-2xl font-bold text-primary">
-                    {product.price}€
+                    {product.precio.toFixed(2)}€
                   </div>
                 </div>
                 
                 <p className="text-muted-foreground text-sm mb-4 leading-relaxed">
-                  {product.description}
+                  {product.descripcion}
                 </p>
                 
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {product.tags.map((tag, tagIndex) => (
+                  {product.etiquetas?.map((tag, tagIndex) => (
                     <div key={tagIndex} className="flex items-center gap-1 text-xs text-primary bg-primary/10 px-2 py-1 rounded-full">
                       <Leaf className="w-3 h-3" />
                       {tag}
@@ -118,9 +135,9 @@ const FeaturedProducts = () => {
                 <HeroButton 
                   variant="secondary" 
                   className="w-full"
-                  disabled={!product.available}
+                  disabled={!product.activo}
                 >
-                  {product.available ? "Reservar" : "Próximamente"}
+                  {product.activo ? "Reservar" : "Próximamente"}
                 </HeroButton>
               </CardContent>
             </Card>
@@ -129,9 +146,11 @@ const FeaturedProducts = () => {
 
         {/* CTA */}
         <div className="text-center">
-          <HeroButton variant="hero" className="mb-4">
-            Ver catálogo completo
-          </HeroButton>
+          <a href="/productos">
+            <HeroButton variant="hero" className="mb-4">
+              Ver catálogo completo
+            </HeroButton>
+          </a>
           <p className="text-sm text-muted-foreground">
             Más de 30 productos artesanales te esperan
           </p>

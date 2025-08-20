@@ -55,6 +55,7 @@ export type Database = {
           categoria: Database["public"]["Enums"]["product_category"]
           created_at: string
           descripcion: string | null
+          destacado: boolean
           etiquetas: string[] | null
           id: string
           imagen_url: string | null
@@ -68,6 +69,7 @@ export type Database = {
           categoria: Database["public"]["Enums"]["product_category"]
           created_at?: string
           descripcion?: string | null
+          destacado?: boolean
           etiquetas?: string[] | null
           id?: string
           imagen_url?: string | null
@@ -81,6 +83,7 @@ export type Database = {
           categoria?: Database["public"]["Enums"]["product_category"]
           created_at?: string
           descripcion?: string | null
+          destacado?: boolean
           etiquetas?: string[] | null
           id?: string
           imagen_url?: string | null
@@ -210,7 +213,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_reservation: {
+        Args: {
+          p_codigo: string
+          p_fecha: string
+          p_franja: string
+          p_items: Json
+          p_notas: string
+          p_user_id: string
+        }
+        Returns: string
+      }
       generate_reservation_code: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      get_current_user_role: {
         Args: Record<PropertyKey, never>
         Returns: string
       }

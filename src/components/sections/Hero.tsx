@@ -1,6 +1,5 @@
 import { HeroButton } from "@/components/ui/hero-button"
 import { Clock, MapPin } from "lucide-react"
-import heroImage from "@/assets/hero-obrador.jpg"
 
 const Hero = () => {
   return (
@@ -8,7 +7,7 @@ const Hero = () => {
       {/* Background Image */}
       <div className="absolute inset-0">
         <img 
-          src={heroImage} 
+          src="/hero-obrador.jpg" 
           alt="Obrador Encinas - Panadería artesanal" 
           className="w-full h-full object-cover"
         />

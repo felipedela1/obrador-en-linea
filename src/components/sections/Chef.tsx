@@ -1,7 +1,6 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Quote, ChefHat, Award, Users } from "lucide-react"
-import chefImage from "@/assets/chef-luis.jpg"
 
 const Chef = () => {
   return (
@@ -12,7 +11,7 @@ const Chef = () => {
           <div className="relative">
             <div className="relative rounded-2xl overflow-hidden shadow-warm">
               <img 
-                src={chefImage} 
+                src="/chef-luis.jpg" 
                 alt="Luis Encinas - Maestro panadero" 
                 className="w-full h-[600px] object-cover"
               />
