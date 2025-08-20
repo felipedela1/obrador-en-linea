@@ -36,7 +36,7 @@ jobs:
             exit 1
           else
             echo "✅ Reset de stock completado exitosamente"
-            echo "$body" | jq '.'
+            echo "$body" | jq '.' || echo "$body"
           fi
         
       - name: Notify on failure
