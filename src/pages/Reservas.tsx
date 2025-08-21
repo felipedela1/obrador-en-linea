@@ -19,7 +19,6 @@ interface AvailableProduct {
   imagen_url: string | null;
   cantidad_disponible: number;
   reservado: number;
-  restante: number;
 }
 
 interface CartItem { product_id: string; nombre: string; precio: number; qty: number; restante: number; }
@@ -86,10 +85,9 @@ const Reservas = () => {
         categoria: p?.categoria || "",
         imagen_url: p?.imagen_url || null,
         cantidad_disponible: s.cantidad_disponible,
-        reservado,
-        restante: Math.max(s.cantidad_disponible - reservado, 0)
+        reservado
       };
-    }).filter(p => !!p.slug && p.restante > 0);
+    }).filter(p => !!p.slug && p.cantidad_disponible > 0);
     setProducts(merged.sort((a,b) => a.nombre.localeCompare(b.nombre)));
     setLoading(false);
   }, [fecha, toast]);
@@ -98,8 +96,11 @@ const Reservas = () => {
 
   const inc = (p: AvailableProduct) => setCart(c => {
     const cur = c[p.product_id];
-    const nextQty = Math.min((cur?.qty || 0) + 1, p.restante);
-    return { ...c, [p.product_id]: { product_id: p.product_id, nombre: p.nombre, precio: p.precio, qty: nextQty, restante: p.restante } };
+    const currentInCart = cur?.qty || 0;
+    const maxCanAdd = Math.max(0, p.cantidad_disponible - currentInCart);
+    if (maxCanAdd <= 0) return c;
+    const nextQty = currentInCart + 1;
+    return { ...c, [p.product_id]: { product_id: p.product_id, nombre: p.nombre, precio: p.precio, qty: nextQty, restante: p.cantidad_disponible } };
   });
   const dec = (p: AvailableProduct) => setCart(c => {
     const cur = c[p.product_id];
@@ -118,6 +119,7 @@ const Reservas = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { toast({ title: "No autenticado", description: "Inicia sesión", variant: "destructive" }); setSubmitting(false); return; }
+      
       // crear reserva
       const { data: resData, error: resErr } = await supabase
         .from("reservations")
@@ -125,6 +127,8 @@ const Reservas = () => {
         .select("id")
         .single();
       if (resErr || !resData) throw resErr || new Error("Sin reserva");
+      
+      // crear items de la reserva
       const itemsPayload = Object.values(cart).map(it => ({
         reservation_id: resData.id,
         product_id: it.product_id,
@@ -136,9 +140,43 @@ const Reservas = () => {
         const { error: itemsErr } = await supabase.from("reservation_items").insert(itemsPayload);
         if (itemsErr) throw itemsErr;
       }
+      
+      // NUEVO: Descontar stock disponible para cada producto reservado
+      const stockUpdates = Object.values(cart).map(async (item) => {
+        // Primero obtener el stock actual
+        const { data: currentStock, error: fetchErr } = await supabase
+          .from("daily_stock")
+          .select("cantidad_disponible")
+          .eq("product_id", item.product_id)
+          .eq("fecha", fecha)
+          .single();
+        
+        if (fetchErr || !currentStock) {
+          throw new Error(`Error obteniendo stock actual de ${item.nombre}`);
+        }
+        
+        // Calcular nuevo stock
+        const newStock = Math.max(0, currentStock.cantidad_disponible - item.qty);
+        
+        // Actualizar con el nuevo valor
+        const { error: stockErr } = await supabase
+          .from("daily_stock")
+          .update({ cantidad_disponible: newStock })
+          .eq("product_id", item.product_id)
+          .eq("fecha", fecha);
+        
+        if (stockErr) {
+          console.error(`Error actualizando stock para ${item.nombre}:`, stockErr);
+          throw new Error(`Error actualizando stock de ${item.nombre}`);
+        }
+      });
+      
+      // Esperar a que todas las actualizaciones de stock terminen
+      await Promise.all(stockUpdates);
+      
       toast({ title: "Reserva creada", description: `Total ${total.toFixed(2)}€` });
       setCart({});
-      fetchAvailable();
+      fetchAvailable(); // Refrescar para mostrar el stock actualizado
     } catch (e: any) {
       toast({ title: "Error reserva", description: e.message, variant: "destructive" });
     } finally {
@@ -185,7 +223,9 @@ const Reservas = () => {
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {filtered.map(p => {
                   const inCart = cart[p.product_id]?.qty || 0;
-                  const restante = p.restante - inCart; // mostrar restante post selección
+                  // Usar cantidad_disponible como fuente de verdad del stock real
+                  const stockDisponible = Math.max(0, p.cantidad_disponible - inCart);
+                  const maxPuedeAgregar = Math.max(0, p.cantidad_disponible - inCart);
                   return (
                     <Card key={p.product_id} className="group overflow-hidden border-border/40 bg-card/60 backdrop-blur-sm">
                       <div className="aspect-video bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center overflow-hidden">
@@ -202,19 +242,18 @@ const Reservas = () => {
                         </div>
                         <div className="flex flex-wrap gap-1 text-[10px]">
                           <Badge variant="secondary">{p.categoria}</Badge>
-                          <Badge variant="outline" className="border-primary/30 text-primary">Disp: {p.cantidad_disponible}</Badge>
-                          <Badge variant="outline" className="border-amber-500/30 text-amber-600">Res: {p.reservado}</Badge>
-                          <Badge variant="outline" className="border-emerald-500/30 text-emerald-600">Rest: {p.restante}</Badge>
+                          <Badge variant="outline" className="border-primary/30 text-primary">Stock: {p.cantidad_disponible}</Badge>
+                          <Badge variant="outline" className="border-amber-500/30 text-amber-600">Reservado: {p.reservado}</Badge>
+                          {inCart > 0 && <Badge variant="outline" className="border-orange-500/30 text-orange-600">Carrito: {inCart}</Badge>}
                         </div>
                         <div className="flex items-center gap-2">
                           <HeroButton variant="hero" disabled={inCart===0} onClick={() => dec(p)} className="h-8 w-8 p-0"><Minus className="w-4 h-4" /></HeroButton>
-                          <Input type="number" min={0} max={p.restante} value={inCart} onChange={e => {
+                          <Input type="number" min={0} max={maxPuedeAgregar} value={inCart} onChange={e => {
                             let v = parseInt(e.target.value, 10) || 0;
-                            v = Math.min(Math.max(v,0), p.restante);
-                            setCart(c => v === 0 ? ( () => { const { [p.product_id]:_, ...rest } = c; return rest; })() : { ...c, [p.product_id]: { product_id: p.product_id, nombre: p.nombre, precio: p.precio, qty: v, restante: p.restante } });
+                            v = Math.min(Math.max(v,0), maxPuedeAgregar);
+                            setCart(c => v === 0 ? ( () => { const { [p.product_id]:_, ...rest } = c; return rest; })() : { ...c, [p.product_id]: { product_id: p.product_id, nombre: p.nombre, precio: p.precio, qty: v, restante: p.cantidad_disponible } });
                           }} className="h-8 w-16 text-center text-xs" />
-                          <HeroButton variant="secondary" disabled={restante<=0} onClick={() => inc(p)} className="h-8 w-8 p-0"><Plus className="w-4 h-4" /></HeroButton>
-                          <div className="text-[11px] text-muted-foreground ml-auto">Quedan {restante}</div>
+                          <HeroButton variant="secondary" disabled={stockDisponible<=0} onClick={() => inc(p)} className="h-8 w-8 p-0"><Plus className="w-4 h-4" /></HeroButton>
                         </div>
                       </CardContent>
                     </Card>
@@ -228,24 +267,34 @@ const Reservas = () => {
               <div className="text-sm text-muted-foreground">Carrito vacío.</div>
             ) : (
               <div className="space-y-4">
-                {Object.values(cart).map(it => (
+                {Object.values(cart).map(it => {
+                  // Buscar el producto actual para obtener stock actualizado
+                  const currentProduct = products.find(p => p.product_id === it.product_id);
+                  const maxStock = currentProduct?.cantidad_disponible || it.restante; // fallback al valor guardado
+                  
+                  return (
                   <div key={it.product_id} className="flex items-center gap-3 p-3 rounded-md border border-border/40 bg-card/50">
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{it.nombre}</div>
                       <div className="text-[11px] text-muted-foreground">x {it.qty} = {(it.qty * it.precio).toFixed(2)}€</div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <HeroButton variant="hero" disabled={it.qty===0} onClick={() => dec({ product_id: it.product_id, nombre: it.nombre, slug: '', precio: it.precio, categoria: '', imagen_url: null, cantidad_disponible: 0, reservado: 0, restante: it.restante })} className="h-8 w-8 p-0"><Minus className="w-4 h-4" /></HeroButton>
-                      <Input type="number" min={0} max={it.restante} value={it.qty} onChange={e => {
+                      <HeroButton variant="hero" disabled={it.qty===0} onClick={() => {
+                        if (currentProduct) dec(currentProduct);
+                      }} className="h-8 w-8 p-0"><Minus className="w-4 h-4" /></HeroButton>
+                      <Input type="number" min={0} max={Math.max(0, maxStock - it.qty)} value={it.qty} onChange={e => {
                         let v = parseInt(e.target.value, 10) || 0;
-                        v = Math.min(Math.max(v,0), it.restante);
+                        v = Math.min(Math.max(v,0), maxStock);
                         setCart(c => v === 0 ? ( () => { const { [it.product_id]:_, ...rest } = c; return rest; })() : { ...c, [it.product_id]: { ...it, qty: v } });
                       }} className="h-8 w-16 text-center text-xs" />
-                      <HeroButton variant="secondary" disabled={it.qty>=it.restante} onClick={() => inc({ product_id: it.product_id, nombre: it.nombre, slug: '', precio: it.precio, categoria: '', imagen_url: null, cantidad_disponible: 0, reservado: 0, restante: it.restante })} className="h-8 w-8 p-0"><Plus className="w-4 h-4" /></HeroButton>
+                      <HeroButton variant="secondary" disabled={it.qty >= maxStock} onClick={() => {
+                        if (currentProduct) inc(currentProduct);
+                      }} className="h-8 w-8 p-0"><Plus className="w-4 h-4" /></HeroButton>
                     </div>
                     <div className="w-16 text-right text-xs font-medium">{(it.qty * it.precio).toFixed(2)}€</div>
                   </div>
-                ))}
+                  );
+                })}
                 <div className="flex items-center justify-between p-4 rounded-md border border-border/50 bg-muted/30">
                   <div className="text-sm font-semibold">Total</div>
                   <div className="text-base font-bold text-primary">{total.toFixed(2)}€</div>

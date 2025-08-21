@@ -1,65 +1,55 @@
--- Migración para reset automático de stock diario
--- Fecha: 2025-08-20
--- Descripción: Función que resetea el stock diario a las 6 AM copiando las cantidades del día anterior
+-- Migración corregida para reset automático de stock diario
 
--- Función para copiar stock del día anterior al día actual
+-- Función corregida: buscar ANTES de eliminar
 CREATE OR REPLACE FUNCTION public.reset_daily_stock()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  yesterday_date DATE;
   today_date DATE;
   product_record RECORD;
+  latest_quantity INTEGER;
   affected_rows INTEGER := 0;
 BEGIN
-  -- Calcular fechas
   today_date := CURRENT_DATE;
-  yesterday_date := today_date - INTERVAL '1 day';
   
-  -- Log del inicio del proceso
   RAISE LOG 'Iniciando reset de stock diario para fecha: %', today_date;
   
-  -- Verificar si ya existe stock para hoy
-  IF EXISTS (SELECT 1 FROM public.daily_stock WHERE fecha = today_date) THEN
-    RAISE LOG 'Ya existe stock para hoy (%), eliminando registros existentes', today_date;
-    DELETE FROM public.daily_stock WHERE fecha = today_date;
-  END IF;
-  
-  -- Copiar stock del día anterior
-  INSERT INTO public.daily_stock (product_id, fecha, cantidad_disponible)
-  SELECT 
-    ds.product_id,
-    today_date,
-    ds.cantidad_disponible
-  FROM public.daily_stock ds
-  INNER JOIN public.products p ON ds.product_id = p.id
-  WHERE ds.fecha = yesterday_date 
-    AND p.activo = true;
-  
-  GET DIAGNOSTICS affected_rows = ROW_COUNT;
-  
-  -- Si no hay stock del día anterior, crear stock por defecto
-  IF affected_rows = 0 THEN
-    RAISE LOG 'No hay stock del día anterior (%), creando stock por defecto', yesterday_date;
+  -- PRIMERO: Para cada producto activo, buscar su stock más reciente
+  FOR product_record IN 
+    SELECT id, nombre, categoria FROM public.products WHERE activo = true
+  LOOP
+    -- Buscar la cantidad más reciente ANTES de eliminar nada
+    SELECT cantidad_disponible INTO latest_quantity
+    FROM public.daily_stock 
+    WHERE product_id = product_record.id 
+    ORDER BY fecha DESC, created_at DESC
+    LIMIT 1;
     
-    INSERT INTO public.daily_stock (product_id, fecha, cantidad_disponible)
-    SELECT 
-      p.id,
-      today_date,
-      CASE 
-        WHEN p.categoria = 'PANES' THEN 20
-        WHEN p.categoria = 'BOLLERIA' THEN 15
-        WHEN p.categoria = 'TARTAS' THEN 3
-        WHEN p.categoria = 'ESPECIALES' THEN 5
+    -- Si no encuentra nada, usar valores por defecto
+    IF latest_quantity IS NULL THEN
+      latest_quantity := CASE 
+        WHEN product_record.categoria = 'PANES' THEN 20
+        WHEN product_record.categoria = 'BOLLERIA' THEN 15
+        WHEN product_record.categoria = 'TARTAS' THEN 3
+        WHEN product_record.categoria = 'ESPECIALES' THEN 5
         ELSE 10
-      END
-    FROM public.products p
-    WHERE p.activo = true;
+      END;
+    END IF;
     
-    GET DIAGNOSTICS affected_rows = ROW_COUNT;
-  END IF;
+    -- Eliminar solo el registro de HOY para este producto (si existe)
+    DELETE FROM public.daily_stock 
+    WHERE product_id = product_record.id AND fecha = today_date;
+    
+    -- Insertar el nuevo registro
+    INSERT INTO public.daily_stock (product_id, fecha, cantidad_disponible)
+    VALUES (product_record.id, today_date, latest_quantity);
+    
+    affected_rows := affected_rows + 1;
+    
+    RAISE LOG 'Producto: % -> Cantidad: %', product_record.nombre, latest_quantity;
+  END LOOP;
   
   RAISE LOG 'Reset de stock completado. Productos actualizados: %', affected_rows;
   
@@ -134,27 +124,15 @@ BEGIN
     RAISE EXCEPTION 'Acceso denegado. Solo administradores pueden ejecutar reset manual.';
   END IF;
   
-  -- Ejecutar reset para la fecha especificada
+  -- Eliminar stock existente para la fecha objetivo
   DELETE FROM public.daily_stock WHERE fecha = target_date;
   
+  -- Para cada producto activo, copiar su stock más reciente
   INSERT INTO public.daily_stock (product_id, fecha, cantidad_disponible)
-  SELECT 
-    ds.product_id,
+  SELECT DISTINCT ON (p.id)
+    p.id,
     target_date,
-    ds.cantidad_disponible
-  FROM public.daily_stock ds
-  INNER JOIN public.products p ON ds.product_id = p.id
-  WHERE ds.fecha = target_date - INTERVAL '1 day' 
-    AND p.activo = true;
-  
-  GET DIAGNOSTICS affected_rows = ROW_COUNT;
-  
-  -- Si no hay stock del día anterior, crear por defecto
-  IF affected_rows = 0 THEN
-    INSERT INTO public.daily_stock (product_id, fecha, cantidad_disponible)
-    SELECT 
-      p.id,
-      target_date,
+    COALESCE(ds.cantidad_disponible, 
       CASE 
         WHEN p.categoria = 'PANES' THEN 20
         WHEN p.categoria = 'BOLLERIA' THEN 15
@@ -162,11 +140,14 @@ BEGIN
         WHEN p.categoria = 'ESPECIALES' THEN 5
         ELSE 10
       END
-    FROM public.products p
-    WHERE p.activo = true;
-    
-    GET DIAGNOSTICS affected_rows = ROW_COUNT;
-  END IF;
+    )
+  FROM public.products p
+  LEFT JOIN public.daily_stock ds ON p.id = ds.product_id
+  WHERE p.activo = true
+    AND (ds.fecha IS NULL OR ds.fecha < target_date)
+  ORDER BY p.id, ds.fecha DESC, ds.created_at DESC;
+  
+  GET DIAGNOSTICS affected_rows = ROW_COUNT;
   
   result := json_build_object(
     'success', true,

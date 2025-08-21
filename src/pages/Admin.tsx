@@ -66,6 +66,7 @@ const Admin = () => {
   const fetchStock = async () => {
     setStockLoading(true);
     const t0s = performance.now();
+    // Intentar obtener ambos campos, pero manejar el error si cantidad_inicial no existe aún
     const { data, error } = await supabase
       .from("daily_stock")
       .select("product_id,cantidad_disponible")
@@ -104,9 +105,24 @@ const Admin = () => {
       return;
     }
     const t0u = performance.now();
+    // Intentar actualizar ambos campos, pero tener fallback si cantidad_inicial no existe
+    let upsertData: any = { 
+      product_id: productId, 
+      fecha: today, 
+      cantidad_disponible: value
+    };
+    
+    // Intentar incluir cantidad_inicial solo si la columna existe
+    try {
+      upsertData.cantidad_inicial = value;
+    } catch (e) {
+      // Si falla, continuar solo con cantidad_disponible
+      console.warn("cantidad_inicial column might not exist yet");
+    }
+    
     const { error, data } = await supabase
       .from("daily_stock")
-      .upsert({ product_id: productId, fecha: today, cantidad_disponible: value }, { onConflict: "product_id,fecha" })
+      .upsert(upsertData, { onConflict: "product_id,fecha" })
       .select("product_id,cantidad_disponible")
       .single();
     const t1u = performance.now();
