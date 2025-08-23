@@ -1,12 +1,11 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { debug } from "@/lib/debug";
 
 // Ligero logger de integridad (solo en desarrollo)
 const logAuth = (label: string, info: Record<string, any> = {}) => {
-  if (!import.meta.env.DEV) return;
-  const ts = new Date().toISOString();
-  // eslint-disable-next-line no-console
-  console.log(`[AUTH-INTEGRITY][${ts}] ${label}`, info);
+  // Redirigimos al sistema de debug central
+  debug.log("auth", label, info);
 };
 
 // Utilidad segura para limpiar cualquier rastro de sesión local de Supabase
@@ -78,19 +77,38 @@ export function useAuthIntegrity() {
       }
 
       const start = performance.now();
-      const res = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession");
+      logAuth("getSession:start", { reason });
+      let res: any;
+      try {
+        res = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession");
+      } catch (e: any) {
+        const duration = +(performance.now() - start).toFixed(1);
+        logAuth("getSession:timeout", { reason, duration_ms: duration, message: e?.message });
+        // No forzamos signout por timeout; dejamos que flux de UI siga sin sesión
+        return;
+      }
       const duration = +(performance.now() - start).toFixed(1);
       const { data, error } = res as any;
-      logAuth("getSession", { reason, duration_ms: duration, hasSession: !!data?.session, hadError: !!error });
+      const session = data?.session as { access_token?: string } | null;
+      const hasAccessToken = !!session?.access_token;
+      const hasLocalToken = Object.keys(localStorage).some(
+        (k) => k.startsWith("sb-") && k.includes("-auth-token")
+      );
+
+      logAuth("getSession:end", { reason, duration_ms: duration, hasSession: !!session, hasAccessToken, hadError: !!error, hasLocalToken });
 
       if (error) {
-        logAuth("getSession.error", { message: error?.message });
+        logAuth("getSession.error", { message: error?.message, name: error?.name, status: (error as any)?.status });
         // Error al recuperar sesión: forzar limpieza y redirect
         await hardSignOutAndReset();
         return;
       }
 
-      const session = data?.session as { access_token?: string } | null;
+      if (!hasAccessToken && !error) {
+        // Caso típico: "Empty access token" en móviles/webviews/cookies bloqueadas
+        logAuth("empty-access-token", { reason, note: "Tratar como no autenticado; revisar storage/cookies" });
+      }
+
       const { iat, exp } = decodeJwt(session?.access_token);
       const nowSec = Math.floor(Date.now() / 1000);
       if (iat && iat - nowSec > 300) {
@@ -101,10 +119,6 @@ export function useAuthIntegrity() {
         // Token claramente expirado y no se refrescó
         logAuth("token expired without refresh", { exp, nowSec });
       }
-
-      const hasLocalToken = Object.keys(localStorage).some(
-        (k) => k.startsWith("sb-") && k.includes("-auth-token")
-      );
 
       // Si no hay sesión válida pero hay restos locales => limpiar
       if (!session && hasLocalToken) {
@@ -138,6 +152,7 @@ export function useAuthIntegrity() {
     const onStorage = (e: StorageEvent) => {
       if (!e.key) return;
       if (e.key.startsWith("sb-") && e.key.includes("-auth-token")) {
+        logAuth("storage", { key: e.key, reason: "auth-token changed" });
         validateSession("storage");
       }
     };
@@ -147,6 +162,7 @@ export function useAuthIntegrity() {
       // Evitar molestar el flujo de recuperación
       const isRecovery = window.location.pathname === "/update-password" || (window.location.hash?.includes("type=recovery"));
       if (isRecovery) return;
+      logAuth("rehydrate-trigger", { source: "focus/visible/online" });
       validateSession("focus/visible/online");
     };
 
