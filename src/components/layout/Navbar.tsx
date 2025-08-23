@@ -230,13 +230,38 @@ const Navbar = () => {
           setEmailVerified(null)
         }
       } catch (err: any) {
-        const msg = !isOnline
-          ? "Sin conexión. Revisa tu red."
-          : (err?.message || "No se pudo conectar con autenticación")
-        logPerf("auth.getSession failure", { message: msg })
-        // Show warning only if we do NOT already have a user (e.g., via onAuthStateChange)
-        if (!hadUserRef.current) {
-          setAuthWarning(`${msg}. Reintentar`)
+        // Si getSession falla (timeout/red), intentamos un refresh como último recurso
+        logPerf('auth.getSession error, trying refresh', { message: err?.message })
+        try {
+          const tR0 = performance.now()
+          const { data, error } = await withTimeout(
+            supabase.auth.refreshSession(),
+            5000,
+            'auth.refreshSession'
+          )
+          const tR1 = performance.now()
+          logPerf('auth.refreshSession', { duration_ms: +(tR1 - tR0).toFixed(1), ok: !error, hadSession: !!data?.session })
+          if (!mounted) return
+          if (error) throw error
+          const s = data?.session ?? null
+          setSession(s)
+          hadUserRef.current = !!s?.user
+          if (s?.user) {
+            setEmailVerified(!!s.user.email_confirmed_at)
+            await upsertProfileIfNeeded(s.user)
+          } else {
+            setProfileRole(null)
+            setProfileName(null)
+            setEmailVerified(null)
+          }
+        } catch (err2: any) {
+          const msg = !isOnline
+            ? "Sin conexión. Revisa tu red."
+            : (err2?.message || err?.message || "No se pudo conectar con autenticación")
+          logPerf("auth.getSession failure (after refresh)", { message: msg })
+          if (!hadUserRef.current) {
+            setAuthWarning(`${msg}. Reintentar`)
+          }
         }
       } finally {
         if (mounted) setAuthLoading(false)
