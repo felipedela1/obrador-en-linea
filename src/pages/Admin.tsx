@@ -660,6 +660,8 @@ const Admin = () => {
             </div>
           </DialogContent>
         </Dialog>
+        </>
+        )}
       </main>
       <Footer />
     </div>
