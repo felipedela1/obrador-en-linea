@@ -11,6 +11,7 @@ const heroButtonVariants = cva(
       variant: {
         hero: "bg-gradient-hero text-primary-foreground shadow-warm hover:shadow-glow hover:scale-105 px-8 py-4",
         secondary: "bg-card/80 border border-border text-foreground hover:bg-accent hover:text-accent-foreground px-6 py-3",
+        confirm: "px-8 py-4 bg-gradient-to-r from-blue-800 via-indigo-800 to-blue-900 text-white shadow-lg shadow-blue-900/30 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 hover:shadow-blue-800/40 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900 active:scale-[0.98]",
       },
     },
     defaultVariants: {

@@ -1,4 +1,5 @@
 import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/sections/Footer";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ProductRow, ProductCategory } from "@/types/models";
@@ -6,14 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; // fixed path
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { HeroButton } from "@/components/ui/hero-button";
 import { useToast } from "@/components/ui/use-toast";
-import { Upload, Plus, RefreshCw, Edit, Trash2, ImageIcon, Check, Loader2, AlertCircle } from "lucide-react";
+import { Upload, Plus, RefreshCw, ImageIcon, Check, Loader2, AlertCircle, Sparkles, Search, Package } from "lucide-react"; // removed unused icons
 
 // Simple perf log (dev only)
 const logPerf = (label: string, info: Record<string, any>) => {
@@ -22,6 +23,26 @@ const logPerf = (label: string, info: Record<string, any>) => {
   // eslint-disable-next-line no-console
   console.log(`[PERF][${ts}] ${label}`, info);
 };
+
+// Skeleton premium para productos
+const ProductSkeleton = ({ index }: { index: number }) => (
+  <Card className="relative overflow-hidden border-0 premium-glass animate-pulse" style={{ animationDelay: `${index * 90}ms` }}>
+    <div className="relative aspect-video w-full bg-white/10 flex items-center justify-center">
+      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400/30 to-indigo-400/30" />
+      <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/0" />
+    </div>
+    <CardContent className="p-4 space-y-3">
+      <div className="h-5 w-2/3 bg-white/30 rounded" />
+      <div className="h-3 w-full bg-white/20 rounded" />
+      <div className="h-3 w-5/6 bg-white/20 rounded" />
+      <div className="flex gap-2 pt-1">
+        <div className="h-5 w-16 bg-white/20 rounded-full" />
+        <div className="h-5 w-20 bg-white/20 rounded-full" />
+      </div>
+      <div className="h-8 w-full bg-blue-500/20 rounded-xl mt-2" />
+    </CardContent>
+  </Card>
+);
 
 interface EditState {
   mode: "create" | "edit";
@@ -48,9 +69,7 @@ const Admin = () => {
   const [edit, setEdit] = useState<EditState>({ mode: "create", product: emptyProduct, open: false });
   const [uploading, setUploading] = useState(false);
   const [filter, setFilter] = useState<string>("");
-  // Nuevo: control de auto-slug
   const [slugAuto, setSlugAuto] = useState(true);
-  // Estado de stock diario
   const [stockMap, setStockMap] = useState<Record<string, { value: number; original: number; saving: boolean; updated?: boolean; error?: string }>>({});
   const [stockLoading, setStockLoading] = useState(false);
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
@@ -230,166 +249,227 @@ const Admin = () => {
     }
   };
 
-  const filtered = products.filter(p => p.nombre.toLowerCase().includes(filter.toLowerCase()) || p.slug.toLowerCase().includes(filter.toLowerCase()));
+  // Métricas rápidas
+  const total = products.length;
+  const activos = products.filter(p => p.activo).length;
+  const inactivos = products.filter(p => !p.activo).length;
+  const destacados = products.filter(p => p.destacado).length;
 
-  // Actualizar slug automáticamente mientras slugAuto esté activo y estemos creando
+  // Actualizar slug automáticamente
   useEffect(() => {
     if (edit.mode === "create" && slugAuto && edit.product?.nombre) {
       setEdit(e => ({ ...e, product: { ...e.product!, slug: slugify(e.product!.nombre || "") } }));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edit.product?.nombre, edit.mode, slugAuto]);
 
+  const filtered = products.filter(p => p.nombre.toLowerCase().includes(filter.toLowerCase()) || p.slug.toLowerCase().includes(filter.toLowerCase()));
+
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col">
       <Navbar />
-      <main className="flex-1 pt-20 pb-10 container mx-auto px-4">
-        {/* Header / acciones */}
-        <div className="mb-6 space-y-4">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-3xl font-bold">Panel de administración</h1>
-            <p className="text-sm text-muted-foreground">Gestiona el catálogo de productos.</p>
+      <main className="flex-1 pt-24 pb-28">
+        {/* HERO HEADER */}
+        <section className="relative overflow-hidden py-20 md:py-28">
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute -top-10 -left-10 w-72 h-72 bg-blue-400/20 blur-3xl rounded-full animate-pulse-slow" />
+            <div className="absolute top-1/2 -right-10 w-96 h-96 bg-indigo-500/10 blur-3xl rounded-full animate-pulse-medium" />
+            <div className="absolute bottom-0 left-1/3 w-[40rem] h-[40rem] bg-sky-400/5 blur-[120px] rounded-full animate-pulse-fast" />
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-            <Input placeholder="Buscar..." value={filter} onChange={e => setFilter(e.target.value)} className="sm:w-56" />
-            <div className="flex flex-col sm:flex-row gap-3 sm:ml-auto w-full sm:w-auto">
-              <Button variant="outline" onClick={fetchProducts} disabled={loading} className="w-full sm:w-auto justify-center">
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" style={{ animationPlayState: loading ? 'running' : 'paused' }} />
-                Refrescar
-              </Button>
-              <HeroButton variant="hero" onClick={openCreate} className="w-full sm:w-auto justify-center">
-                <Plus className="w-4 h-4 mr-2" /> Nuevo
-              </HeroButton>
+          <div className="relative container mx-auto px-6 text-center max-w-5xl" style={{ opacity: 0, animation: 'fade-in 0.8s ease forwards' }}>
+            <div className="inline-flex items-center gap-2 px-6 py-2 premium-glass gradient-border rounded-full text-sm font-medium text-slate-800 mb-8">
+              <Sparkles className="w-4 h-4 text-blue-600" />
+              <span className="tracking-wider">PANEL ADMIN</span>
+            </div>
+            <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight"><span className="shimmer-title">Administración</span></h1>
+            <p className="text-xl md:text-2xl text-black/90 max-w-3xl mx-auto leading-relaxed font-light">Gestiona catálogo, stock diario y atributos destacados con una experiencia visual consistente.</p>
+            <div className="h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent max-w-64 mx-auto mt-8" />
+          </div>
+        </section>
+
+        {/* CONTROLES / RESUMEN */}
+        <section className="relative -mt-10 pb-8">
+          <div className="container mx-auto px-6">
+            <div className="premium-glass rounded-2xl p-6 md:p-8 gradient-border space-y-6" style={{ opacity: 0, animation: 'fade-in 0.8s ease forwards 0.15s' }}>
+              <div className="flex flex-col xl:flex-row gap-8 items-start xl:items-end justify-between">
+                <div className="w-full xl:w-auto space-y-6">
+                  <div className="flex flex-wrap gap-3">
+                    <Badge variant="secondary" className="bg-white/50 text-slate-800 rounded-full px-4 py-1">Total: {total}</Badge>
+                    <Badge variant="secondary" className="bg-white/40 text-slate-700 rounded-full">Activos: {activos}</Badge>
+                    <Badge variant="secondary" className="bg-white/40 text-slate-700 rounded-full">Inactivos: {inactivos}</Badge>
+                    <Badge variant="secondary" className="bg-white/40 text-slate-700 rounded-full">Destacados: {destacados}</Badge>
+                  </div>
+                  <div className="flex flex-col md:flex-row gap-4 w-full">
+                    <div className="relative md:w-72">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600 w-4 h-4" />
+                      <Input placeholder="Buscar productos..." aria-label="Buscar productos" value={filter} onChange={e => setFilter(e.target.value)} className="pl-12 bg-white/60 backdrop-blur placeholder:text-slate-500" />
+                    </div>
+                    <div className="relative md:w-48">
+                      <Input type="date" value={today} disabled className="bg-white/50 text-slate-600" aria-label="Fecha (referencia stock)" />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
+                  <HeroButton variant="secondary" onClick={fetchProducts} disabled={loading} className="flex items-center h-10">
+                    {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />} Refrescar
+                  </HeroButton>
+                  <HeroButton variant="hero" onClick={openCreate} className="flex items-center h-10"><Plus className="w-4 h-4 mr-2" /> Nuevo</HeroButton>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Floating Action Button en móvil */}
+        {/* LISTADO TABS */}
+        <section className="relative pt-4">
+          <div className="container mx-auto px-6" style={{ opacity: 0, animation: 'fade-in 0.8s ease forwards 0.25s' }}>
+            <Tabs defaultValue="list" className="space-y-8">
+              <TabsList className="premium-glass gradient-border">
+                <TabsTrigger value="list">Listado ({filtered.length})</TabsTrigger>
+                <TabsTrigger value="destacados">Destacados ({destacados})</TabsTrigger>
+                <TabsTrigger value="inactivos">Inactivos ({inactivos})</TabsTrigger>
+              </TabsList>
+              <TabsContent value="list" className="space-y-6">
+                {loading && products.length === 0 ? (
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <ProductSkeleton key={i} index={i} />)}</div>
+                ) : filtered.length === 0 ? (
+                  <div className="premium-glass rounded-2xl p-12 text-center max-w-3xl mx-auto">
+                    <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-2xl"><Package className="w-7 h-7" /></div>
+                    <h3 className="text-3xl font-bold mb-4"><span className="shimmer-title">Sin resultados</span></h3>
+                    <p className="text-black/80 mb-6">No hay productos que coincidan con la búsqueda actual.</p>
+                    <HeroButton variant="secondary" onClick={() => setFilter("")}>Reiniciar filtro</HeroButton>
+                  </div>
+                ) : (
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {filtered.map((p, idx) => (
+                      <Card key={p.id} className="relative group overflow-hidden border-0 premium-glass hover-float" style={{ opacity: 0, animation: `fade-in 0.7s ease forwards ${idx * 0.05}s` }}>
+                        <div className="aspect-video bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center overflow-hidden">
+                          {p.imagen_url ? (
+                            <img src={p.imagen_url} alt={p.nombre} className="object-cover w-full h-full transform group-hover:scale-105 transition-transform duration-700" />
+                          ) : (
+                            <ImageIcon className="w-10 h-10 text-white/50" />
+                          )}
+                          <div className="absolute top-3 left-3 flex flex-col gap-2">
+                            <Badge className="premium-glass-dark border-0 text-white px-3 py-1 text-[10px]">{p.categoria}</Badge>
+                            {p.destacado && <Badge className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-0 text-[10px] shadow">Destacado</Badge>}
+                            {!p.activo && <Badge className="bg-red-500/80 text-white border-0 text-[10px] shadow">Inactivo</Badge>}
+                          </div>
+                        </div>
+                        <CardHeader className="p-4 pb-2">
+                          <CardTitle className="text-base font-semibold flex items-center justify-between gap-2">
+                            <span className="truncate text-slate-800" title={p.nombre}>{p.nombre}</span>
+                            <span className="text-lg font-bold shimmer-title whitespace-nowrap">{p.precio.toFixed(2)}€</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 pt-2 space-y-3">
+                          <p className="text-xs text-slate-700 line-clamp-2 min-h-[2.0rem]">{p.descripcion}</p>
+                          {/* Stock diario */}
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              inputMode="numeric"
+                              min={0}
+                              className="h-8 w-24 text-xs bg-white/70 backdrop-blur font-semibold"
+                              placeholder="Stock"
+                              value={stockMap[p.id]?.value ?? ""}
+                              onChange={e => {
+                                const raw = e.target.value;
+                                const num = Math.max(0, raw === "" ? 0 : parseInt(raw, 10) || 0);
+                                setStockMap(m => ({
+                                  ...m,
+                                  [p.id]: { ...(m[p.id] || { original: 0, saving: false }), value: num }
+                                }));
+                              }}
+                              onBlur={() => commitStock(p.id, stockMap[p.id]?.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
+                              aria-label={`Stock disponible ${p.nombre}`}
+                            />
+                            {stockMap[p.id]?.saving && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
+                            {!stockMap[p.id]?.saving && stockMap[p.id]?.error && <AlertCircle data-error={stockMap[p.id]?.error} className="w-4 h-4 text-red-500" />}
+                            {!stockMap[p.id]?.saving && !stockMap[p.id]?.error && stockMap[p.id]?.updated && <Check className="w-4 h-4 text-green-500" />}
+                            {!stockMap[p.id] && !stockLoading && (
+                              <span className="text-[10px] text-slate-500">—</span>
+                            )}
+                          </div>
+                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <HeroButton variant="hero" className="h-8 px-3 text-[11px]" onClick={() => openEdit(p)}>Editar</HeroButton>
+                            <HeroButton variant="secondary" className="h-8 px-3 text-[11px]" onClick={() => deleteProduct(p)}>Borrar</HeroButton>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+              <TabsContent value="destacados">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {products.filter(p => p.destacado).map((p, idx) => (
+                    <Card key={p.id} className="premium-glass border-0 overflow-hidden hover-float" style={{ opacity: 0, animation: `fade-in 0.6s ease forwards ${idx * 0.05}s` }}>
+                      <CardHeader className="p-4 pb-2 flex flex-col gap-2">
+                        <div className="flex items-center justify-between text-sm font-medium text-slate-800"><span className="truncate" title={p.nombre}>{p.nombre}</span><span className="shimmer-title font-bold">{p.precio.toFixed(2)}€</span></div>
+                        <div className="flex gap-1 flex-wrap">
+                          <Badge variant="secondary" className="bg-white/50 text-slate-700 text-[10px]">{p.categoria}</Badge>
+                          {!p.activo && <Badge className="bg-red-500/80 text-white text-[10px]">Inactivo</Badge>}
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-4 pt-2 text-xs text-slate-700 line-clamp-3 min-h-[3.2rem]">{p.descripcion}</CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </TabsContent>
+              <TabsContent value="inactivos">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {products.filter(p => !p.activo).map((p, idx) => (
+                    <Card key={p.id} className="premium-glass border-0 overflow-hidden hover-float" style={{ opacity: 0, animation: `fade-in 0.6s ease forwards ${idx * 0.05}s` }}>
+                      <CardHeader className="p-4 pb-2 flex flex-col gap-2">
+                        <div className="flex items-center justify-between text-sm font-medium text-slate-800"><span className="truncate" title={p.nombre}>{p.nombre}</span><span className="shimmer-title font-bold">{p.precio.toFixed(2)}€</span></div>
+                        <div className="flex gap-1 flex-wrap">
+                          <Badge variant="secondary" className="bg-white/50 text-slate-700 text-[10px]">{p.categoria}</Badge>
+                          {p.destacado && <Badge className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[10px]">Destacado</Badge>}
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-4 pt-2 text-xs text-slate-700 line-clamp-3 min-h-[3.2rem]">{p.descripcion}</CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </section>
+
+        {/* CTA FINAL */}
+        <section className="relative py-24">
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute top-0 right-10 w-72 h-72 bg-blue-400/10 blur-3xl rounded-full animate-pulse-slow" />
+            <div className="absolute bottom-0 left-10 w-96 h-96 bg-indigo-500/10 blur-3xl rounded-full animate-pulse-medium" />
+          </div>
+          <div className="container mx-auto px-6">
+            <Card className="premium-glass rounded-3xl border-0 overflow-hidden text-center gradient-border p-0" style={{ opacity: 0, animation: 'fade-in 0.9s ease forwards 0.35s' }}>
+              <CardContent className="relative z-10 p-12 md:p-20">
+                <h2 className="text-4xl md:text-5xl font-bold mb-6 leading-tight"><span className="shimmer-title">¿Gestionar reservas?</span></h2>
+                <p className="text-lg md:text-xl text-black/85 max-w-3xl mx-auto mb-10 font-light">Accede al flujo de reservas o revisa tus pedidos para garantizar disponibilidad y consistencia.</p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center max-w-xl mx-auto">
+                  <HeroButton variant="hero" asChild><a href="/reservas">Ir a Reservas</a></HeroButton>
+                  <HeroButton variant="secondary" asChild><a href="/misreservas">Mis Reservas</a></HeroButton>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
+        {/* FAB móvil */}
         <div className="md:hidden fixed bottom-20 right-4 z-40">
           <HeroButton variant="hero" className="rounded-full shadow-lg px-4 py-2" onClick={openCreate} aria-label="Nuevo producto">
             <Plus className="w-4 h-4" />
           </HeroButton>
         </div>
 
-        {/* Tabs y listados */}
-        <Tabs defaultValue="list" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="list">Listado</TabsTrigger>
-            <TabsTrigger value="destacados">Destacados ({products.filter(p => p.destacado).length})</TabsTrigger>
-            <TabsTrigger value="inactivos">Inactivos ({products.filter(p => !p.activo).length})</TabsTrigger>
-          </TabsList>
-          <TabsContent value="list" className="space-y-4">
-            {stockLoading && (
-              <div className="text-xs text-muted-foreground">Cargando stock diario...</div>
-            )}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {filtered.map(p => (
-                <Card key={p.id} className="relative group overflow-hidden border-border/40 bg-card/60 backdrop-blur-sm">
-                  <div className="aspect-video bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center overflow-hidden">
-                    {p.imagen_url ? (
-                      <img src={p.imagen_url} alt={p.nombre} className="object-cover w-full h-full" />
-                    ) : (
-                      <ImageIcon className="w-10 h-10 text-muted-foreground/40" />
-                    )}
-                  </div>
-                  <CardHeader className="p-4 pb-2">
-                    <CardTitle className="text-base font-semibold flex items-center justify-between gap-2">
-                      <span className="truncate" title={p.nombre}>{p.nombre}</span>
-                      <span className="text-primary font-bold">{p.precio.toFixed(2)}€</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-2 space-y-2">
-                    <div className="flex flex-wrap gap-1">
-                      <Badge variant="secondary" className="text-[10px]">{p.categoria}</Badge>
-                      {p.destacado && <Badge variant="default" className="text-[10px] bg-primary/90">Destacado</Badge>}
-                      {!p.activo && <Badge variant="destructive" className="text-[10px]">Inactivo</Badge>}
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2 min-h-[2.0rem]">{p.descripcion}</p>
-                    {/* Stock diario */}
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        className="h-8 w-24 text-xs"
-                        placeholder="Stock"
-                        value={stockMap[p.id]?.value ?? ""}
-                        onChange={e => {
-                          const raw = e.target.value;
-                          const num = Math.max(0, raw === "" ? 0 : parseInt(raw, 10) || 0);
-                          setStockMap(m => ({
-                            ...m,
-                            [p.id]: { ...(m[p.id] || { original: 0, saving: false }), value: num }
-                          }));
-                        }}
-                        onBlur={() => commitStock(p.id, stockMap[p.id]?.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') {
-                            e.currentTarget.blur();
-                          }
-                        }}
-                      />
-                      {stockMap[p.id]?.saving && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-                      {!stockMap[p.id]?.saving && stockMap[p.id]?.error && <AlertCircle data-error={stockMap[p.id]?.error} className="w-4 h-4 text-destructive" />}
-                      {!stockMap[p.id]?.saving && !stockMap[p.id]?.error && stockMap[p.id]?.updated && <Check className="w-4 h-4 text-green-500" />}
-                      {!stockMap[p.id] && !stockLoading && (
-                        <span className="text-[10px] text-muted-foreground">—</span>
-                      )}
-                    </div>
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(p)}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => deleteProduct(p)}>
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-          <TabsContent value="destacados">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {products.filter(p => p.destacado).map(p => (
-                <Card key={p.id} className="border-border/40 bg-card/60 backdrop-blur-sm">
-                  <CardHeader className="p-4 pb-2 flex flex-col gap-2">
-                    <div className="flex items-center justify-between text-sm font-medium"><span>{p.nombre}</span><span className="text-primary font-bold">{p.precio.toFixed(2)}€</span></div>
-                    <div className="flex gap-1 flex-wrap">
-                      <Badge variant="secondary" className="text-[10px]">{p.categoria}</Badge>
-                      {!p.activo && <Badge variant="destructive" className="text-[10px]">Inactivo</Badge>}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-2 text-xs text-muted-foreground line-clamp-3 min-h-[3.2rem]">{p.descripcion}</CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-          <TabsContent value="inactivos">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {products.filter(p => !p.activo).map(p => (
-                <Card key={p.id} className="border-border/40 bg-card/60 backdrop-blur-sm">
-                  <CardHeader className="p-4 pb-2 flex flex-col gap-2">
-                    <div className="flex items-center justify-between text-sm font-medium"><span>{p.nombre}</span><span className="text-primary font-bold">{p.precio.toFixed(2)}€</span></div>
-                    <div className="flex gap-1 flex-wrap">
-                      <Badge variant="secondary" className="text-[10px]">{p.categoria}</Badge>
-                      {p.destacado && <Badge variant="default" className="text-[10px] bg-primary/90">Destacado</Badge>}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-2 text-xs text-muted-foreground line-clamp-3 min-h-[3.2rem]">{p.descripcion}</CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-        </Tabs>
-
-        {/* Dialog de edición / creación */}
+        {/* Dialog creación/edición */}
         <Dialog open={edit.open} onOpenChange={o => setEdit(e => ({ ...e, open: o }))}>
-          <DialogContent className="max-w-2xl w-full sm:rounded-lg">
+          <DialogContent className="max-w-2xl w-full sm:rounded-2xl premium-glass border-0">
             <DialogHeader>
-              <DialogTitle className="pr-8 flex flex-col gap-1">
+              <DialogTitle className="pr-8 flex flex-col gap-1 text-slate-800">
                 {edit.mode === "create" ? "Nuevo producto" : `Editar: ${edit.product?.nombre}`}
-                <span className="text-xs font-normal text-muted-foreground">Rellena la información y guarda.</span>
+                <span className="text-xs font-normal text-slate-600">Rellena la información y guarda.</span>
               </DialogTitle>
             </DialogHeader>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-2 max-h-[70vh] overflow-y-auto pr-1 md:pr-2">
@@ -402,12 +482,12 @@ const Admin = () => {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Slug</Label>
-                    <button type="button" onClick={() => setSlugAuto(v => !v)} className="text-[10px] px-2 py-0.5 rounded border border-border/50 hover:bg-muted/40">
+                    <button type="button" onClick={() => setSlugAuto(v => !v)} className="text-[10px] px-2 py-0.5 rounded border border-border/50 hover:bg-white/40">
                       {slugAuto ? "Auto" : "Manual"}
                     </button>
                   </div>
                   <Input value={edit.product?.slug || ""} disabled={slugAuto} onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, slug: e.target.value } }))} placeholder="baguette-masa-madre" />
-                  {slugAuto && <p className="text-[10px] text-muted-foreground">Se genera automáticamente a partir del nombre.</p>}
+                  {slugAuto && <p className="text-[10px] text-slate-500">Se genera automáticamente a partir del nombre.</p>}
                 </div>
                 <div className="space-y-2">
                   <Label>Descripción</Label>
@@ -420,7 +500,7 @@ const Admin = () => {
                   </div>
                   <div className="space-y-2">
                     <Label>Categoría</Label>
-                    <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={edit.product?.categoria} onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, categoria: e.target.value as ProductCategory } }))}>
+                    <select className="w-full rounded-md border border-input bg-background/70 px-3 py-2 text-sm" value={edit.product?.categoria} onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, categoria: e.target.value as ProductCategory } }))}>
                       <option value="PANES">Panes</option>
                       <option value="BOLLERIA">Bollería</option>
                       <option value="TARTAS">Tartas</option>
@@ -439,7 +519,7 @@ const Admin = () => {
                 <div className="space-y-2">
                   <Label>Imagen (ruta en /public)</Label>
                   <Input type="text" placeholder="/mi-imagen.jpg" value={edit.product?.imagen_url || ""} onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, imagen_url: e.target.value } }))} />
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <div className="flex items-center gap-2 text-[11px] text-slate-600">
                     <Upload className="w-3 h-3" /> Copia el archivo a /public y referencia aquí.
                   </div>
                   <div className="space-y-2 mt-3">
@@ -447,26 +527,26 @@ const Admin = () => {
                     <Input type="file" accept="image/*" onChange={handleImageSelect} disabled={uploading} />
                   </div>
                   {edit.product?.imagen_url && (
-                    <div className="mt-3 rounded-md overflow-hidden border border-border/40 bg-muted/20">
+                    <div className="mt-3 rounded-md overflow-hidden border border-white/30 bg-white/10">
                       <div className="aspect-video w-full bg-muted/40 flex items-center justify-center overflow-hidden">
                         <img src={edit.product.imagen_url} alt="Vista previa" className="object-cover w-full h-full" />
                       </div>
-                      <div className="text-[10px] p-2 break-all text-center text-muted-foreground">{edit.product.imagen_url}</div>
+                      <div className="text-[10px] p-2 break-all text-center text-slate-600">{edit.product.imagen_url}</div>
                     </div>
                   )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2">
+                  <div className="flex items-center justify-between rounded-md border border-white/40 px-3 py-2 bg-white/20 backdrop-blur">
                     <Label htmlFor="activo" className="text-xs">Activo</Label>
                     <Switch id="activo" checked={!!edit.product?.activo} onCheckedChange={v => setEdit(ed => ({ ...ed, product: { ...ed.product!, activo: v } }))} />
                   </div>
-                  <div className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2">
+                  <div className="flex items-center justify-between rounded-md border border-white/40 px-3 py-2 bg-white/20 backdrop-blur">
                     <Label htmlFor="destacado" className="text-xs">Destacado</Label>
                     <Switch id="destacado" checked={!!edit.product?.destacado} onCheckedChange={v => setEdit(ed => ({ ...ed, product: { ...ed.product!, destacado: v } }))} />
                   </div>
                 </div>
-                <div className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2 opacity-50">
+                <div className="flex items-center justify-between rounded-md border border-white/30 px-3 py-2 opacity-50 bg-white/10 backdrop-blur">
                   <Label htmlFor="reservable" className="text-xs">Reservable</Label>
                   <Switch id="reservable" disabled />
                 </div>
@@ -482,6 +562,7 @@ const Admin = () => {
           </DialogContent>
         </Dialog>
       </main>
+      <Footer />
     </div>
   );
 };

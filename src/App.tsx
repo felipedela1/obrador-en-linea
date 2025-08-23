@@ -18,6 +18,18 @@ import ResetPasswordRequest from "./pages/ResetPasswordRequest";
 import UpdatePassword from "./pages/UpdatePassword";
 import { supabase } from "@/integrations/supabase/client";
 
+// NUEVO: Componente para restaurar scroll al top en cada cambio de ruta
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    // Evitar comportamiento inesperado en navegaciones con hash ancla
+    if (window.location.hash && window.location.hash.length > 1) return;
+    // Scroll inmediato para que el usuario vea siempre el inicio de la página nueva
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+};
+
 const queryClient = new QueryClient();
 
 function App() {
@@ -25,6 +37,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <BrowserRouter>
+          <ScrollToTop />
           <AppInner />
           <Sonner />
           <Toaster />
