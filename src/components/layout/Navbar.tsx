@@ -268,7 +268,7 @@ const Navbar = () => {
         <div className={mobile ? "flex flex-col space-y-4" : "hidden md:flex items-center justify-center flex-1"}>
           {mobile ? (
             // Para móvil: texto elegante con icono
-            <div className="text-center py-6 flex flex-col items-center space-y-2">
+            <div className="text-center py-6 flex flex-col items-center space-y-2" aria-live="polite">
               <div className="w-10 h-10 premium-glass rounded-full flex items-center justify-center">
                 <Wheat className="w-5 h-5 text-blue-600 animate-pulse" />
               </div>
@@ -276,7 +276,7 @@ const Navbar = () => {
             </div>
           ) : (
             // Para desktop: barra de carga premium con gradiente
-            <div className="relative w-56 h-8 premium-glass rounded-full overflow-hidden shadow-soft">
+            <div className="relative w-56 h-8 premium-glass rounded-full overflow-hidden shadow-soft" aria-live="polite">
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-400/50 to-transparent animate-[loading-wave_2.5s_ease-in-out_infinite] w-1/2 h-full" />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="flex items-center space-x-2">
@@ -346,6 +346,7 @@ const Navbar = () => {
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)'
               }}
+              aria-live="polite"
             >
               <div className="flex items-center">
                 <AlertCircle className="w-5 h-5 shrink-0 animate-pulse" />
@@ -356,7 +357,7 @@ const Navbar = () => {
                 size="sm"
                 className="h-8 px-4 bg-white/20 hover:bg-white/30 text-white border-white/30 font-medium transition-all duration-300"
                 onClick={resendVerification}
-                disabled={resending}
+                disabled={resending || isSigningOut}
               >
                 {resending ? "Enviando..." : resent ? "✓ Enviado" : "Reenviar"}
               </Button>
@@ -394,7 +395,7 @@ const Navbar = () => {
               </div>
 
               {authLoading ? (
-                <div className="premium-glass relative w-40 h-10 rounded-full overflow-hidden shadow-xl">
+                <div className="premium-glass relative w-40 h-10 rounded-full overflow-hidden shadow-xl" aria-live="polite">
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-400/50 to-transparent animate-[loading-wave_2.5s_ease-in-out_infinite] w-1/2 h-full" style={{ animationDelay: '0.7s' }} />
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="flex items-center space-x-2">
@@ -492,7 +493,7 @@ const Navbar = () => {
                         size="sm" 
                         variant="secondary"
                         onClick={resendVerification} 
-                        disabled={resending} 
+                        disabled={resending || isSigningOut} 
                         className="w-full bg-white/20 hover:bg-white/30 text-white border-white/30 font-medium"
                       >
                         {resending ? "Enviando..." : resent ? "✓ Enviado" : "Reenviar verificación"}
@@ -508,7 +509,7 @@ const Navbar = () => {
                   {/* User section móvil mejorada */}
                   <div className="mt-auto space-y-4">
                     {authLoading ? (
-                      <div className="text-center py-8 flex flex-col items-center space-y-3">
+                      <div className="text-center py-8 flex flex-col items-center space-y-3" aria-live="polite">
                         <div className="w-12 h-12 premium-glass rounded-full flex items-center justify-center">
                           <UserIcon className="w-6 h-6 text-blue-600 animate-pulse" />
                         </div>

@@ -17,6 +17,7 @@ import MisReservas from "./pages/MisReservas";
 import ResetPasswordRequest from "./pages/ResetPasswordRequest";
 import UpdatePassword from "./pages/UpdatePassword";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuthIntegrity } from "@/hooks/useAuthIntegrity";
 
 // NUEVO: Componente para restaurar scroll al top en cada cambio de ruta
 const ScrollToTop = () => {
@@ -33,6 +34,9 @@ const ScrollToTop = () => {
 const queryClient = new QueryClient();
 
 function App() {
+  // Activar vigilancia de integridad de sesión a nivel de app
+  useAuthIntegrity();
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
