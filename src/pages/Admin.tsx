@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { HeroButton } from "@/components/ui/hero-button";
 import { useToast } from "@/components/ui/use-toast";
 import { Upload, Plus, RefreshCw, ImageIcon, Check, Loader2, AlertCircle, Sparkles, Search, Package } from "lucide-react"; // removed unused icons
+import { useProfileGate } from "@/hooks/useProfileGate";
 
 // Simple perf log (dev only)
 const logPerf = (label: string, info: Record<string, any>) => {
@@ -64,6 +65,7 @@ const emptyProduct: Partial<ProductRow> = {
 
 const Admin = () => {
   const { toast } = useToast();
+  const gate = useProfileGate();
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [edit, setEdit] = useState<EditState>({ mode: "create", product: emptyProduct, open: false });
@@ -178,7 +180,8 @@ const Admin = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchProducts(); }, []);
+  // Cargar productos solo si la puerta de perfil lo permite y el usuario es admin
+  useEffect(() => { if (gate.allowed && gate.profile?.role === 'admin') { fetchProducts(); } }, [gate.allowed, gate.profile?.role]);
   // Cuando cambie el listado de productos (primera carga o refresh) cargamos stock
   useEffect(() => { if (products.length) fetchStock(); }, [products.length]);
 
@@ -268,6 +271,48 @@ const Admin = () => {
     <div className="min-h-screen flex flex-col">
       <Navbar />
       <main className="flex-1 pt-24 pb-28">
+        {/* Gate: require session+DB profile and admin role */}
+        {gate.loading ? (
+          <section className="relative overflow-hidden py-20 md:py-28">
+            <div className="relative container mx-auto px-6 text-center max-w-5xl" style={{ opacity: 0, animation: 'fade-in 0.8s ease forwards' }}>
+              <div className="inline-flex items-center gap-2 px-6 py-2 premium-glass gradient-border rounded-full text-sm font-medium text-slate-800 mb-8">
+                <Sparkles className="w-4 h-4 text-blue-600" />
+                <span className="tracking-wider">PREPARANDO ENTORNO</span>
+              </div>
+              <div className="premium-glass rounded-2xl p-10 max-w-lg mx-auto flex items-center justify-center gap-3">
+                <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                <span className="text-sm text-slate-700">Verificando sesión y base de datos...</span>
+              </div>
+            </div>
+          </section>
+        ) : gate.error ? (
+          <section className="relative overflow-hidden py-20 md:py-28">
+            <div className="relative container mx-auto px-6 text-center max-w-2xl">
+              <div className="premium-glass rounded-2xl p-8 gradient-border">
+                <div className="flex items-center justify-center gap-2 mb-4 text-red-600">
+                  <AlertCircle className="w-5 h-5" />
+                  <span className="font-semibold">No se puede continuar</span>
+                </div>
+                <p className="text-sm text-slate-700 mb-6">{gate.error}</p>
+                <HeroButton variant="secondary" onClick={gate.retry}>Reintentar</HeroButton>
+              </div>
+            </div>
+          </section>
+        ) : gate.profile?.role !== 'admin' ? (
+          <section className="relative overflow-hidden py-20 md:py-28">
+            <div className="relative container mx-auto px-6 text-center max-w-2xl">
+              <div className="premium-glass rounded-2xl p-8 gradient-border">
+                <div className="flex items-center justify-center gap-2 mb-4 text-red-600">
+                  <AlertCircle className="w-5 h-5" />
+                  <span className="font-semibold">Acceso restringido</span>
+                </div>
+                <p className="text-sm text-slate-700 mb-6">Necesitas permisos de administrador para acceder a esta sección.</p>
+                <HeroButton asChild variant="secondary"><a href="/">Volver al inicio</a></HeroButton>
+              </div>
+            </div>
+          </section>
+        ) : (
+        <>
         {/* HERO HEADER */}
         <section className="relative overflow-hidden py-20 md:py-28">
           <div className="absolute inset-0 pointer-events-none">
@@ -400,37 +445,91 @@ const Admin = () => {
                   </div>
                 )}
               </TabsContent>
-              <TabsContent value="destacados">
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {products.filter(p => p.destacado).map((p, idx) => (
-                    <Card key={p.id} className="premium-glass border-0 overflow-hidden hover-float" style={{ opacity: 0, animation: `fade-in 0.6s ease forwards ${idx * 0.05}s` }}>
-                      <CardHeader className="p-4 pb-2 flex flex-col gap-2">
-                        <div className="flex items-center justify-between text-sm font-medium text-slate-800"><span className="truncate" title={p.nombre}>{p.nombre}</span><span className="shimmer-title font-bold">{p.precio.toFixed(2)}€</span></div>
-                        <div className="flex gap-1 flex-wrap">
-                          <Badge variant="secondary" className="bg-white/50 text-slate-700 text-[10px]">{p.categoria}</Badge>
-                          {!p.activo && <Badge className="bg-red-500/80 text-white text-[10px]">Inactivo</Badge>}
+              <TabsContent value="destacados" className="space-y-6">
+                {loading && products.length === 0 ? (
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <ProductSkeleton key={i} index={i} />)}</div>
+                ) : filtered.filter(p => p.destacado).length === 0 ? (
+                  <div className="premium-glass rounded-2xl p-12 text-center max-w-3xl mx-auto">
+                    <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-2xl"><Package className="w-7 h-7" /></div>
+                    <h3 className="text-3xl font-bold mb-4"><span className="shimmer-title">Sin destacados</span></h3>
+                    <p className="text-black/80 mb-6">Activa la opción "Destacado" en los productos que quieras destacar.</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {filtered.filter(p => p.destacado).map((p, idx) => (
+                      <Card key={p.id} className="relative group overflow-hidden border-0 premium-glass hover-float" style={{ opacity: 0, animation: `fade-in 0.7s ease forwards ${idx * 0.05}s` }}>
+                        <div className="aspect-video bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center overflow-hidden">
+                          {p.imagen_url ? (
+                            <img src={p.imagen_url} alt={p.nombre} className="object-cover w-full h-full transform group-hover:scale-105 transition-transform duration-700" />
+                          ) : (
+                            <ImageIcon className="w-10 h-10 text-white/50" />
+                          )}
+                          <div className="absolute top-3 left-3 flex flex-col gap-2">
+                            <Badge className="premium-glass-dark border-0 text-white px-3 py-1 text-[10px]">{p.categoria}</Badge>
+                            {p.destacado && <Badge className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-0 text-[10px] shadow">Destacado</Badge>}
+                            {!p.activo && <Badge className="bg-red-500/80 text-white border-0 text-[10px] shadow">Inactivo</Badge>}
+                          </div>
                         </div>
-                      </CardHeader>
-                      <CardContent className="p-4 pt-2 text-xs text-slate-700 line-clamp-3 min-h-[3.2rem]">{p.descripcion}</CardContent>
-                    </Card>
-                  ))}
-                </div>
+                        <CardHeader className="p-4 pb-2">
+                          <CardTitle className="text-base font-semibold flex items-center justify-between gap-2">
+                            <span className="truncate text-slate-800" title={p.nombre}>{p.nombre}</span>
+                            <span className="text-lg font-bold shimmer-title whitespace-nowrap">{p.precio.toFixed(2)}€</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 pt-2 space-y-3">
+                          <p className="text-xs text-slate-700 line-clamp-2 min-h-[2.0rem]">{p.descripcion}</p>
+                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <HeroButton variant="hero" className="h-8 px-3 text-[11px]" onClick={() => openEdit(p)}>Editar</HeroButton>
+                            <HeroButton variant="secondary" className="h-8 px-3 text-[11px]" onClick={() => deleteProduct(p)}>Borrar</HeroButton>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
-              <TabsContent value="inactivos">
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {products.filter(p => !p.activo).map((p, idx) => (
-                    <Card key={p.id} className="premium-glass border-0 overflow-hidden hover-float" style={{ opacity: 0, animation: `fade-in 0.6s ease forwards ${idx * 0.05}s` }}>
-                      <CardHeader className="p-4 pb-2 flex flex-col gap-2">
-                        <div className="flex items-center justify-between text-sm font-medium text-slate-800"><span className="truncate" title={p.nombre}>{p.nombre}</span><span className="shimmer-title font-bold">{p.precio.toFixed(2)}€</span></div>
-                        <div className="flex gap-1 flex-wrap">
-                          <Badge variant="secondary" className="bg-white/50 text-slate-700 text-[10px]">{p.categoria}</Badge>
-                          {p.destacado && <Badge className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[10px]">Destacado</Badge>}
+              <TabsContent value="inactivos" className="space-y-6">
+                {loading && products.length === 0 ? (
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <ProductSkeleton key={i} index={i} />)}</div>
+                ) : filtered.filter(p => !p.activo).length === 0 ? (
+                  <div className="premium-glass rounded-2xl p-12 text-center max-w-3xl mx-auto">
+                    <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-2xl"><Package className="w-7 h-7" /></div>
+                    <h3 className="text-3xl font-bold mb-4"><span className="shimmer-title">Sin inactivos</span></h3>
+                    <p className="text-black/80 mb-6">Todos los productos están activos actualmente.</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {filtered.filter(p => !p.activo).map((p, idx) => (
+                      <Card key={p.id} className="relative group overflow-hidden border-0 premium-glass hover-float" style={{ opacity: 0, animation: `fade-in 0.7s ease forwards ${idx * 0.05}s` }}>
+                        <div className="aspect-video bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center overflow-hidden">
+                          {p.imagen_url ? (
+                            <img src={p.imagen_url} alt={p.nombre} className="object-cover w-full h-full transform group-hover:scale-105 transition-transform duration-700" />
+                          ) : (
+                            <ImageIcon className="w-10 h-10 text-white/50" />
+                          )}
+                          <div className="absolute top-3 left-3 flex flex-col gap-2">
+                            <Badge className="premium-glass-dark border-0 text-white px-3 py-1 text-[10px]">{p.categoria}</Badge>
+                            {p.destacado && <Badge className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-0 text-[10px] shadow">Destacado</Badge>}
+                            {!p.activo && <Badge className="bg-red-500/80 text-white border-0 text-[10px] shadow">Inactivo</Badge>}
+                          </div>
                         </div>
-                      </CardHeader>
-                      <CardContent className="p-4 pt-2 text-xs text-slate-700 line-clamp-3 min-h-[3.2rem]">{p.descripcion}</CardContent>
-                    </Card>
-                  ))}
-                </div>
+                        <CardHeader className="p-4 pb-2">
+                          <CardTitle className="text-base font-semibold flex items-center justify-between gap-2">
+                            <span className="truncate text-slate-800" title={p.nombre}>{p.nombre}</span>
+                            <span className="text-lg font-bold shimmer-title whitespace-nowrap">{p.precio.toFixed(2)}€</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 pt-2 space-y-3">
+                          <p className="text-xs text-slate-700 line-clamp-2 min-h-[2.0rem]">{p.descripcion}</p>
+                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <HeroButton variant="hero" className="h-8 px-3 text-[11px]" onClick={() => openEdit(p)}>Editar</HeroButton>
+                            <HeroButton variant="secondary" className="h-8 px-3 text-[11px]" onClick={() => deleteProduct(p)}>Borrar</HeroButton>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </div>
@@ -565,6 +664,6 @@ const Admin = () => {
       <Footer />
     </div>
   );
-};
+}
 
 export default Admin;

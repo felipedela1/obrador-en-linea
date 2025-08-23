@@ -6,7 +6,15 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Link, useNavigate } from "react-router-dom";
 import { HeroButton } from "@/components/ui/hero-button";
-import { Eye, EyeOff, Lock, Mail, Sparkles, Loader2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, Sparkles, Loader2, AlertCircle, WifiOff } from "lucide-react";
+import { debug } from "@/lib/debug";
+
+// Timeout helper to avoid hangs on poor networks
+const withTimeout = async <T,>(p: Promise<T>, ms = 8000, label = "op"): Promise<T> => {
+  let t: number | undefined;
+  const timeout = new Promise<never>((_, rej) => { t = window.setTimeout(() => rej(new Error(`Timeout ${label} after ${ms}ms`)), ms); });
+  try { return (await Promise.race([p, timeout])) as T; } finally { if (t) clearTimeout(t); }
+};
 
 const Login = () => {
   const navigate = useNavigate();
@@ -16,20 +24,57 @@ const Login = () => {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
 
   useEffect(() => { setMounted(true); }, []);
+
+  // Redirect away if already authenticated
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session } } = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession");
+        if (!cancelled && session?.user) {
+          navigate("/", { replace: true });
+        }
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [navigate]);
+
+  // Online/offline awareness
+  useEffect(() => {
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
     setError(null);
+    if (!isOnline) { setError("Sin conexión. Revisa tu red e inténtalo de nuevo."); return; }
     setLoading(true);
+    debug.log("auth", "login.submit", { emailMasked: email.replace(/(^.).+(@.*$)/, "$1***$2") });
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      const { error: signErr } = await withTimeout(
+        supabase.auth.signInWithPassword({ email, password }),
+        10000,
+        "auth.signIn"
+      );
+      if (signErr) throw signErr;
       navigate("/");
     } catch (e: any) {
-      setError(e.message || "Error iniciando sesión");
+      const msg = e?.message || "Error iniciando sesión";
+      debug.log("auth", "login.error", { message: msg });
+      const friendly =
+        /invalid login credentials|invalid/i.test(msg) ? "Credenciales incorrectas. Revisa email y contraseña." :
+        /email not confirmed|confirm/i.test(msg) ? "Email no confirmado. Revisa tu correo para activar la cuenta." :
+        /rate limit|too many/i.test(msg) ? "Demasiados intentos. Prueba de nuevo más tarde." :
+        msg;
+      setError(friendly);
     } finally {
       setLoading(false);
     }
@@ -66,6 +111,12 @@ const Login = () => {
               <CardDescription id="login-desc" className="text-slate-700">Introduce tus credenciales para continuar</CardDescription>
             </CardHeader>
             <CardContent className="relative pt-0 pb-6">
+              {!isOnline && (
+                <div className="mb-4 text-xs font-medium text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-md px-3 py-2 flex items-start gap-2" role="alert" aria-live="assertive">
+                  <WifiOff className="w-4 h-4 mt-0.5" aria-hidden="true" />
+                  <span>Sin conexión. Intenta de nuevo cuando vuelvas a estar online.</span>
+                </div>
+              )}
               <form onSubmit={handleSubmit} className="space-y-6" aria-busy={loading} noValidate>
                 <div className="space-y-2">
                   <label htmlFor="email" className="text-sm font-medium flex items-center gap-2">
@@ -123,8 +174,8 @@ const Login = () => {
                 <HeroButton
                   type="submit"
                   variant="confirm"
-                  disabled={loading}
-                  aria-disabled={loading}
+                  disabled={loading || !isOnline}
+                  aria-disabled={loading || !isOnline}
                   className="w-full justify-center h-12 text-base tracking-wide"
                 >
                   {loading && <Loader2 className="w-5 h-5 mr-2 animate-spin" aria-hidden="true" />} {loading ? "Ingresando..." : "Entrar"}
