@@ -54,6 +54,9 @@ const Navbar = () => {
          null)
       : null
 
+  // Track if we've already seen a valid user (prevents showing warnings if already signed-in)
+  const hadUserRef = useRef(false)
+
   // Estado para detectar scroll y la posición
   const [scrolled, setScrolled] = useState(false)
   const lastScrollY = useRef(0)
@@ -217,6 +220,7 @@ const Navbar = () => {
         logPerf("auth.getSession", { duration_ms: +(t1 - t0).toFixed(1), hasSession: !!session })
         if (!mounted) return
         setSession(session)
+        hadUserRef.current = !!session?.user
         if (session?.user) {
           setEmailVerified(!!session.user.email_confirmed_at)
           await upsertProfileIfNeeded(session.user)
@@ -230,9 +234,10 @@ const Navbar = () => {
           ? "Sin conexión. Revisa tu red."
           : (err?.message || "No se pudo conectar con autenticación")
         logPerf("auth.getSession failure", { message: msg })
-        // eslint-disable-next-line no-console
-        if (import.meta.env.DEV) console.error("[AUTH] init error:", err)
-        setAuthWarning(`${msg}. Reintentar`)
+        // Show warning only if we do NOT already have a user (e.g., via onAuthStateChange)
+        if (!hadUserRef.current) {
+          setAuthWarning(`${msg}. Reintentar`)
+        }
       } finally {
         if (mounted) setAuthLoading(false)
       }
@@ -244,6 +249,7 @@ const Navbar = () => {
       logPerf("auth.onAuthStateChange", { event: evt, hasSession: !!newSession })
       if (!mounted) return
       setSession(newSession)
+      hadUserRef.current = !!newSession?.user
       if (newSession?.user) {
         setEmailVerified(!!newSession.user.email_confirmed_at)
         await upsertProfileIfNeeded(newSession.user)
@@ -315,10 +321,12 @@ const Navbar = () => {
   const navLinks = [
     { label: "Inicio", href: "/" },
     { label: "Productos", href: "/productos" },
-    ...(isLogged && (profileRole === "customer" || profileRole === "admin") ? [
+    // Mostrar Reservas/Mis reservas para cualquier usuario logueado, incluso si el rol aún no está cargado
+    ...(isLogged ? [
       { label: "Reservas", href: "/reservas" },
       { label: "Mis reservas", href: "/misreservas" }
     ] : []),
+    // Admin solo si el rol es admin
     ...(profileRole === "admin" ? [{ label: "Admin", href: "/admin" }] : [])
   ]
 
