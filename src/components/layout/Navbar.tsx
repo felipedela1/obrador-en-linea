@@ -16,6 +16,20 @@ const logPerf = (label: string, info: Record<string, any>) => {
   console.log(`[PERF][${ts}] ${label}`, info)
 }
 
+// Timeout guard to avoid infinite spinners on network stalls
+const withTimeout = async <T,>(promise: Promise<T>, ms = 7000, label = "operation"): Promise<T> => {
+  let timeoutId: number | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(`Timeout ${label} after ${ms}ms`)), ms)
+  })
+  try {
+    const result = (await Promise.race([promise, timeout])) as T
+    return result
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
 const Navbar = () => {
   const [session, setSession] = useState<Session | null>(null)
   const [profileRole, setProfileRole] = useState<UserRole | null>(null)
@@ -48,11 +62,36 @@ const Navbar = () => {
   // Nuevo estado para detectar si necesitamos fondo oscuro
   const [needsDarkBg, setNeedsDarkBg] = useState(false)
 
+  // Nuevo: advertencia de auth/red y recarga manual
+  const [authWarning, setAuthWarning] = useState<string | null>(null)
+  const [authReload, setAuthReload] = useState(0)
+  const retryAuth = () => {
+    logPerf("auth.retry", { reason: authWarning })
+    setAuthWarning(null)
+    setAuthLoading(true)
+    setAuthReload((c) => c + 1)
+  }
+
+  // Nuevo: estado de conectividad
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true)
+
   // Detectar rutas que necesitan fondo oscuro
   useEffect(() => {
     const darkBackgroundRoutes = ["/", "/inicio", "/home"]
     setNeedsDarkBg(darkBackgroundRoutes.includes(location.pathname))
   }, [location.pathname])
+
+  // Monitorizar conectividad para dar feedback rápido
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   // Mejorar el comportamiento de scroll para mayor fluidez
   useEffect(() => {
@@ -93,13 +132,17 @@ const Navbar = () => {
     let mounted = true
     const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || "admin@obradorencinas.com").toLowerCase()
 
+    type ProfileRow = { id: string; role: UserRole; nombre: string }
+
     const upsertProfileIfNeeded = async (u: SupaUser) => {
       const t0 = performance.now()
-      const { data, error } = await supabase
+      const selRes = await supabase
         .from("profiles")
         .select("id,role,nombre")
         .eq("user_id", u.id)
         .maybeSingle()
+      const data = (selRes as any)?.data as ProfileRow | null
+      const error = (selRes as any)?.error as { message?: string } | null
       const t1 = performance.now()
       logPerf("profiles.select maybeSingle", {
         duration_ms: +(t1 - t0).toFixed(1),
@@ -122,7 +165,7 @@ const Navbar = () => {
           u.email && u.email.toLowerCase() === ADMIN_EMAIL ? "admin" : "customer"
 
         const t2 = performance.now()
-        const { data: inserted, error: insertErr } = await supabase
+        const insRes = await supabase
           .from("profiles")
           .insert({
             user_id: u.id,
@@ -134,6 +177,8 @@ const Navbar = () => {
           })
           .select("role,nombre")
           .single()
+        const inserted = (insRes as any)?.data as { role: UserRole; nombre: string } | null
+        const insertErr = (insRes as any)?.error as { message?: string } | null
         const t3 = performance.now()
         logPerf("profiles.insert single", {
           duration_ms: +(t3 - t2).toFixed(1),
@@ -160,21 +205,37 @@ const Navbar = () => {
 
     const init = async () => {
       setAuthLoading(true)
+      setAuthWarning(null)
       const t0 = performance.now()
-      const { data: { session } } = await supabase.auth.getSession()
-      const t1 = performance.now()
-      logPerf("auth.getSession", { duration_ms: +(t1 - t0).toFixed(1), hasSession: !!session })
-      if (!mounted) return
-      setSession(session)
-      if (session?.user) {
-        setEmailVerified(!!session.user.email_confirmed_at)
-        await upsertProfileIfNeeded(session.user)
-      } else {
-        setProfileRole(null)
-        setProfileName(null)
-        setEmailVerified(null)
+      try {
+        const { data: { session } } = await withTimeout(
+          supabase.auth.getSession(),
+          6000,
+          'auth.getSession'
+        )
+        const t1 = performance.now()
+        logPerf("auth.getSession", { duration_ms: +(t1 - t0).toFixed(1), hasSession: !!session })
+        if (!mounted) return
+        setSession(session)
+        if (session?.user) {
+          setEmailVerified(!!session.user.email_confirmed_at)
+          await upsertProfileIfNeeded(session.user)
+        } else {
+          setProfileRole(null)
+          setProfileName(null)
+          setEmailVerified(null)
+        }
+      } catch (err: any) {
+        const msg = !isOnline
+          ? "Sin conexión. Revisa tu red."
+          : (err?.message || "No se pudo conectar con autenticación")
+        logPerf("auth.getSession failure", { message: msg })
+        // eslint-disable-next-line no-console
+        if (import.meta.env.DEV) console.error("[AUTH] init error:", err)
+        setAuthWarning(`${msg}. Reintentar`)
+      } finally {
+        if (mounted) setAuthLoading(false)
       }
-      setAuthLoading(false)
     }
 
     init()
@@ -197,7 +258,7 @@ const Navbar = () => {
       mounted = false
       listener.subscription.unsubscribe()
     }
-  }, [])
+  }, [authReload, isOnline])
 
   const handleSignOut = async () => {
     if (isSigningOut) return
@@ -394,7 +455,8 @@ const Navbar = () => {
                 <span className="font-medium">Abierto hasta 14:00</span>
               </div>
 
-              {authLoading ? (
+              {/* Estado de autenticación con control de timeout y reintento */}
+              {isLogged && authLoading ? (
                 <div className="premium-glass relative w-40 h-10 rounded-full overflow-hidden shadow-xl" aria-live="polite">
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-400/50 to-transparent animate-[loading-wave_2.5s_ease-in-out_infinite] w-1/2 h-full" style={{ animationDelay: '0.7s' }} />
                   <div className="absolute inset-0 flex items-center justify-center">
@@ -403,6 +465,14 @@ const Navbar = () => {
                       <span className="text-xs text-slate-700 font-medium">Verificando sesión...</span>
                     </div>
                   </div>
+                </div>
+              ) : authWarning ? (
+                <div className="flex items-center gap-2 premium-glass px-3 py-2 rounded-full shadow-xl text-xs text-slate-700" role="alert" aria-live="assertive">
+                  <AlertCircle className="w-4 h-4 text-amber-500" />
+                  <span className="max-w-[12rem] truncate">{authWarning}</span>
+                  <Button size="sm" variant="ghost" className="h-7 px-2 text-blue-600 hover:text-blue-700" onClick={retryAuth}>
+                    Reintentar
+                  </Button>
                 </div>
               ) : isLogged ? (
                 <div 
