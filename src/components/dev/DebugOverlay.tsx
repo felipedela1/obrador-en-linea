@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { debug, DebugRecord } from "@/lib/debug";
+import { supabase } from "@/integrations/supabase/client";
+import type { UserRole } from "@/types/models";
 
 const formatTs = (ms: number) => new Date(ms).toLocaleTimeString();
 
@@ -16,6 +18,34 @@ export const DebugOverlay: React.FC = () => {
   const [records, setRecords] = useState<DebugRecord[]>(() => debug.getAll());
   const [filter, setFilter] = useState<string>("");
   const [enabled, setEnabled] = useState<boolean>(debug.isEnabled());
+  const [role, setRole] = useState<UserRole | null>(null);
+
+  // Resolve current role (admin/customer/guest)
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const u = session?.user;
+        if (!u) { if (mounted) setRole(null); return; }
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("user_id", u.id)
+          .maybeSingle();
+        if (!mounted) return;
+        if (error) { setRole(null); return; }
+        setRole((data?.role as UserRole) || null);
+      } catch {
+        if (mounted) setRole(null);
+      }
+    };
+    load();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => load());
+    return () => { mounted = false; sub.subscription.unsubscribe(); };
+  }, []);
+
+  const isAdmin = role === "admin";
 
   useEffect(() => {
     const off = debug.on((rec) => {
@@ -36,17 +66,30 @@ export const DebugOverlay: React.FC = () => {
   }, []);
 
   // NEW: Force-enable when URL contains ?debug=1 even after SPA navigation
+  const forcedByQuery = (() => {
+    try { const p = new URLSearchParams(window.location.search); return p.get("debug") === "1"; } catch { return false; }
+  })();
   useEffect(() => {
     try {
       const p = new URLSearchParams(window.location.search);
       if (p.get("debug") === "1") {
         debug.setEnabled(true);
         setEnabled(true);
+        setOpen(true); // auto-open when forced
       }
     } catch {}
   }, []);
 
-  const visible = enabled;
+  // If not admin and not forced, make sure overlay is not visible even if previously enabled
+  useEffect(() => {
+    if (!isAdmin && !forcedByQuery && enabled) {
+      debug.setEnabled(false);
+      setEnabled(false);
+      setOpen(false);
+    }
+  }, [isAdmin, forcedByQuery, enabled]);
+
+  const visible = forcedByQuery || (enabled && isAdmin);
   const filtered = useMemo(() => {
     if (!filter) return records;
     const f = filter.toLowerCase();
@@ -98,14 +141,16 @@ export const DebugOverlay: React.FC = () => {
 
   return (
     <div className="fixed z-[10000] bottom-4 right-4 select-text">
-      {/* Toggle */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="px-3 py-1 rounded-full text-white text-xs font-semibold shadow-lg bg-slate-800/90 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        aria-label="Toggle debug overlay"
-      >
-        DBG
-      </button>
+      {/* Toggle: only visible for admins */}
+      {isAdmin && (
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="px-3 py-1 rounded-full text-white text-xs font-semibold shadow-lg bg-slate-800/90 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="Toggle debug overlay"
+        >
+          DBG
+        </button>
+      )}
 
       {/* Panel */}
       {open && (

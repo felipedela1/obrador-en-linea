@@ -45,14 +45,10 @@ const Navbar = () => {
   const isRecoveryRoute = location.pathname === "/update-password"
   const user = session?.user || null
   const isLogged = !!user && !isRecoveryRoute
-  const displayName =
-    isLogged
-      ? (profileName ||
-         user.user_metadata?.nombre ||
-         user.user_metadata?.name ||
-         user.email ||
-         null)
-      : null
+  // Mostrar nombre solo si DB respondió correctamente (perfil cargado)
+  const [dbReady, setDbReady] = useState(false)
+  const [dbWarning, setDbWarning] = useState<string | null>(null)
+  const displayName = isLogged && dbReady ? (profileName || null) : null
 
   // Track if we've already seen a valid user (prevents showing warnings if already signed-in)
   const hadUserRef = useRef(false)
@@ -69,8 +65,9 @@ const Navbar = () => {
   const [authWarning, setAuthWarning] = useState<string | null>(null)
   const [authReload, setAuthReload] = useState(0)
   const retryAuth = () => {
-    logPerf("auth.retry", { reason: authWarning })
+    logPerf("auth.retry", { reason: authWarning || dbWarning })
     setAuthWarning(null)
+    setDbWarning(null)
     setAuthLoading(true)
     setAuthReload((c) => c + 1)
   }
@@ -160,6 +157,8 @@ const Navbar = () => {
         logPerf("profiles.select error", { message: error.message })
         setProfileRole(null)
         setProfileName(null)
+        setDbReady(false)
+        setDbWarning(!isOnline ? "Sin conexión. Revisa tu red." : "No se pudo conectar a la base de datos")
         return
       }
 
@@ -195,20 +194,28 @@ const Navbar = () => {
           if (insertErr) logPerf("profiles.insert error", { message: insertErr.message })
           setProfileRole(null)
           setProfileName(null)
+          setDbReady(false)
+          setDbWarning(!isOnline ? "Sin conexión. Revisa tu red." : "No se pudo crear perfil (DB)")
           return
         }
         setProfileRole(inserted.role as UserRole)
         setProfileName(inserted.nombre)
+        setDbReady(true)
+        setDbWarning(null)
         return
       }
 
       setProfileRole((data.role as UserRole) || null)
       setProfileName(data.nombre || null)
+      setDbReady(true)
+      setDbWarning(null)
     }
 
     const init = async () => {
       setAuthLoading(true)
       setAuthWarning(null)
+      setDbWarning(null)
+      setDbReady(false)
       const t0 = performance.now()
       try {
         const { data: { session } } = await withTimeout(
@@ -228,6 +235,8 @@ const Navbar = () => {
           setProfileRole(null)
           setProfileName(null)
           setEmailVerified(null)
+          setDbReady(false)
+          setDbWarning(null)
         }
       } catch (err: any) {
         // Si getSession falla (timeout/red), intentamos un refresh como último recurso
@@ -253,6 +262,8 @@ const Navbar = () => {
             setProfileRole(null)
             setProfileName(null)
             setEmailVerified(null)
+            setDbReady(false)
+            setDbWarning(null)
           }
         } catch (err2: any) {
           const msg = !isOnline
@@ -262,6 +273,7 @@ const Navbar = () => {
           if (!hadUserRef.current) {
             setAuthWarning(`${msg}. Reintentar`)
           }
+          setDbReady(false)
         }
       } finally {
         if (mounted) setAuthLoading(false)
@@ -282,6 +294,8 @@ const Navbar = () => {
         setProfileRole(null)
         setProfileName(null)
         setEmailVerified(null)
+        setDbReady(false)
+        setDbWarning(null)
       }
     })
 
@@ -309,6 +323,8 @@ const Navbar = () => {
       setProfileRole(null)
       setProfileName(null)
       setEmailVerified(null)
+      setDbReady(false)
+      setDbWarning(null)
       toast({ title: "Sesión cerrada" })
       window.location.replace("/")
     } catch (e: any) {
@@ -346,12 +362,12 @@ const Navbar = () => {
   const navLinks = [
     { label: "Inicio", href: "/" },
     { label: "Productos", href: "/productos" },
-    // Mostrar Reservas/Mis reservas para cualquier usuario logueado, incluso si el rol aún no está cargado
-    ...(isLogged ? [
+    // Mostrar Reservas/Mis reservas solo cuando DB esté lista
+    ...(isLogged && dbReady ? [
       { label: "Reservas", href: "/reservas" },
       { label: "Mis reservas", href: "/misreservas" }
     ] : []),
-    // Admin solo si el rol es admin
+    // Admin solo si el rol es admin (y por tanto DB lista)
     ...(profileRole === "admin" ? [{ label: "Admin", href: "/admin" }] : [])
   ]
 
@@ -507,6 +523,14 @@ const Navbar = () => {
                     Reintentar
                   </Button>
                 </div>
+              ) : isLogged && !dbReady ? (
+                <div className="flex items-center gap-2 premium-glass px-3 py-2 rounded-full shadow-xl text-xs text-slate-700" role="status" aria-live="polite">
+                  <AlertCircle className="w-4 h-4 text-blue-600" />
+                  <span className="max-w-[12rem] truncate">{dbWarning || "Conectando a base de datos..."}</span>
+                  <Button size="sm" variant="ghost" className="h-7 px-2 text-blue-600 hover:text-blue-700" onClick={retryAuth}>
+                    Reintentar
+                  </Button>
+                </div>
               ) : isLogged ? (
                 <div 
                   className="flex items-center space-x-3"
@@ -617,6 +641,12 @@ const Navbar = () => {
                           <UserIcon className="w-6 h-6 text-blue-600 animate-pulse" />
                         </div>
                         <span className="text-sm text-slate-600 font-medium">Verificando identidad...</span>
+                      </div>
+                    ) : isLogged && !dbReady ? (
+                      <div className="flex items-center gap-3 premium-glass p-4 rounded-xl shadow-xl text-sm text-slate-700" role="status" aria-live="polite">
+                        <AlertCircle className="w-5 h-5 text-blue-600" />
+                        <span className="flex-1">{dbWarning || "Conectando a base de datos..."}</span>
+                        <Button size="sm" variant="outline" onClick={() => { retryAuth(); }} className="h-8">Reintentar</Button>
                       </div>
                     ) : isLogged ? (
                       <div className="space-y-4">
