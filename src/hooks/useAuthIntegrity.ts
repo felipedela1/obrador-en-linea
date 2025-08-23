@@ -1,6 +1,14 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
+// Ligero logger de integridad (solo en desarrollo)
+const logAuth = (label: string, info: Record<string, any> = {}) => {
+  if (!import.meta.env.DEV) return;
+  const ts = new Date().toISOString();
+  // eslint-disable-next-line no-console
+  console.log(`[AUTH-INTEGRITY][${ts}] ${label}`, info);
+};
+
 // Utilidad segura para limpiar cualquier rastro de sesión local de Supabase
 const clearLocalSupabaseAuth = () => {
   try {
@@ -25,6 +33,32 @@ const hardSignOutAndReset = async () => {
   }
 };
 
+// Timeout helper para evitar bloqueos por red
+const withTimeout = async <T,>(p: Promise<T>, ms = 7000, label = "op"): Promise<T> => {
+  let t: number | undefined;
+  const timeout = new Promise<never>((_, rej) => {
+    t = window.setTimeout(() => rej(new Error(`Timeout ${label} ${ms}ms`)), ms);
+  });
+  try {
+    return (await Promise.race([p, timeout])) as T;
+  } finally {
+    if (t) clearTimeout(t);
+  }
+};
+
+// Decodifica de forma segura un JWT para inspeccionar iat/exp
+const decodeJwt = (token: string | undefined | null): { iat?: number; exp?: number } => {
+  if (!token) return {};
+  try {
+    const payload = token.split(".")[1];
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const json = atob(normalized);
+    return JSON.parse(json);
+  } catch {
+    return {};
+  }
+};
+
 export function useAuthIntegrity() {
   const checking = useRef(false);
   const lastCheck = useRef<number>(0);
@@ -38,20 +72,43 @@ export function useAuthIntegrity() {
     checking.current = true;
 
     try {
-      const { data, error } = await supabase.auth.getSession();
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        logAuth("skip getSession offline", { reason });
+        return;
+      }
+
+      const start = performance.now();
+      const res = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession");
+      const duration = +(performance.now() - start).toFixed(1);
+      const { data, error } = res as any;
+      logAuth("getSession", { reason, duration_ms: duration, hasSession: !!data?.session, hadError: !!error });
+
       if (error) {
+        logAuth("getSession.error", { message: error?.message });
         // Error al recuperar sesión: forzar limpieza y redirect
         await hardSignOutAndReset();
         return;
       }
 
-      const session = data.session;
+      const session = data?.session as { access_token?: string } | null;
+      const { iat, exp } = decodeJwt(session?.access_token);
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (iat && iat - nowSec > 300) {
+        // Reloj del dispositivo muy adelantado
+        logAuth("device clock ahead", { iat, nowSec });
+      }
+      if (exp && nowSec > exp + 30) {
+        // Token claramente expirado y no se refrescó
+        logAuth("token expired without refresh", { exp, nowSec });
+      }
+
       const hasLocalToken = Object.keys(localStorage).some(
         (k) => k.startsWith("sb-") && k.includes("-auth-token")
       );
 
       // Si no hay sesión válida pero hay restos locales => limpiar
       if (!session && hasLocalToken) {
+        logAuth("no session but local tokens present", { reason });
         await hardSignOutAndReset();
         return;
       }
@@ -64,6 +121,7 @@ export function useAuthIntegrity() {
   useEffect(() => {
     // 1) Suscripción estándar a cambios de auth
     const { data: sub } = supabase.auth.onAuthStateChange(async (event) => {
+      logAuth("authState", { event });
       if (event === "SIGNED_OUT") {
         clearLocalSupabaseAuth();
         if (window.location.pathname !== "/login" && window.location.pathname !== "/update-password") {
