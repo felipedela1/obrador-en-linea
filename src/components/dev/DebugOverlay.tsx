@@ -132,7 +132,8 @@ export const DebugOverlay: React.FC = () => {
       debug.log("env", "cookies", { ok: ckOK });
       // auth token presence (keys only)
       const keys = Object.keys(localStorage).filter(k => k.startsWith("sb-") && k.includes("-auth-token"));
-      debug.log("auth", "local tokens keys", { keys, hasKeys: keys.length > 0 });
+      const custom = !!localStorage.getItem('obrador-auth');
+      debug.log("auth", "local tokens keys", { keys, hasKeys: keys.length > 0, hasCustomKey: custom });
       debug.log("env", "self-test:end", {});
     } catch (e: any) {
       debug.log("env", "self-test:error", { message: e?.message }, "error");

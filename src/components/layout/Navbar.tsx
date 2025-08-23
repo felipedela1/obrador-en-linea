@@ -315,6 +315,8 @@ const Navbar = () => {
       logPerf("auth.signOut", { duration_ms: +(t1 - t0).toFixed(1), hadError: !!error })
       if (error) throw error
 
+      // Además de claves sb-*, limpiar la clave personalizada usada por el cliente
+      try { localStorage.removeItem('obrador-auth') } catch {}
       Object.keys(localStorage)
         .filter(k => k.startsWith("sb-") && k.includes("-auth-token"))
         .forEach(k => localStorage.removeItem(k))

@@ -11,6 +11,9 @@ const logAuth = (label: string, info: Record<string, any> = {}) => {
 // Utilidad segura para limpiar cualquier rastro de sesión local de Supabase
 const clearLocalSupabaseAuth = () => {
   try {
+    // El cliente usa storageKey personalizado: 'obrador-auth'
+    localStorage.removeItem('obrador-auth');
+    // Además, limpiar posibles claves heredadas por si coexistieron
     Object.keys(localStorage)
       .filter((k) => k.startsWith("sb-") && k.includes("-auth-token"))
       .forEach((k) => localStorage.removeItem(k));
@@ -84,23 +87,22 @@ export function useAuthIntegrity() {
       } catch (e: any) {
         const duration = +(performance.now() - start).toFixed(1);
         logAuth("getSession:timeout", { reason, duration_ms: duration, message: e?.message });
-        // No forzamos signout por timeout; dejamos que flux de UI siga sin sesión
+        // No forzar signout por timeout; tratar como estado desconocido y permitir reintentos
         return;
       }
       const duration = +(performance.now() - start).toFixed(1);
       const { data, error } = res as any;
       const session = data?.session as { access_token?: string } | null;
       const hasAccessToken = !!session?.access_token;
-      const hasLocalToken = Object.keys(localStorage).some(
+      const hasLocalToken = !!localStorage.getItem('obrador-auth') || Object.keys(localStorage).some(
         (k) => k.startsWith("sb-") && k.includes("-auth-token")
       );
 
       logAuth("getSession:end", { reason, duration_ms: duration, hasSession: !!session, hasAccessToken, hadError: !!error, hasLocalToken });
 
       if (error) {
+        // No forzar limpieza y redirect aquí; puede ser un fallo transitorio de red/navegador
         logAuth("getSession.error", { message: error?.message, name: error?.name, status: (error as any)?.status });
-        // Error al recuperar sesión: forzar limpieza y redirect
-        await hardSignOutAndReset();
         return;
       }
 
@@ -120,10 +122,13 @@ export function useAuthIntegrity() {
         logAuth("token expired without refresh", { exp, nowSec });
       }
 
-      // Si no hay sesión válida pero hay restos locales => limpiar
+      // Si no hay sesión válida pero hay restos locales => limpiar suavemente sin redirigir
       if (!session && hasLocalToken) {
         logAuth("no session but local tokens present", { reason });
-        await hardSignOutAndReset();
+        try {
+          await supabase.auth.signOut({ scope: 'local' });
+        } catch {}
+        clearLocalSupabaseAuth();
         return;
       }
     } finally {
@@ -151,7 +156,7 @@ export function useAuthIntegrity() {
     // 2) Cambios en localStorage desde otras pestañas
     const onStorage = (e: StorageEvent) => {
       if (!e.key) return;
-      if (e.key.startsWith("sb-") && e.key.includes("-auth-token")) {
+      if ((e.key.startsWith("sb-") && e.key.includes("-auth-token")) || e.key === 'obrador-auth') {
         logAuth("storage", { key: e.key, reason: "auth-token changed" });
         validateSession("storage");
       }

@@ -60,6 +60,8 @@ const UpdatePassword = () => {
     setAccessToken(access_token)
     setRefreshToken(refresh_token)
     try {
+      // Limpiar también la clave personalizada
+      try { localStorage.removeItem('obrador-auth') } catch {}
       const keysToRemove = Object.keys(localStorage).filter(k => k.startsWith("sb-") && k.includes("-auth-token"))
       keysToRemove.forEach(k => localStorage.removeItem(k))
     } catch (e) { console.error("[UpdatePassword] Error limpiando localStorage", e) }
@@ -96,6 +98,8 @@ const UpdatePassword = () => {
       toast({ title: "Contraseña actualizada", description: "Inicia sesión con la nueva contraseña." })
       try {
         await supabase.auth.signOut({ scope: "global" })
+        // Limpiar también la clave personalizada
+        try { localStorage.removeItem('obrador-auth') } catch {}
         Object.keys(localStorage).filter(k => k.startsWith("sb-") && k.includes("-auth-token")).forEach(k => localStorage.removeItem(k))
       } catch (signOutError) { console.error("[UpdatePassword] Error signOut post-cambio", signOutError) }
       setTimeout(() => { window.location.replace("/login") }, 1400)
