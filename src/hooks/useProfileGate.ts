@@ -28,21 +28,84 @@ export function useProfileGate() {
         if (typeof navigator !== "undefined" && navigator.onLine === false) {
           setError("Sin conexión. Revisa tu red."); setAllowed(false); return;
         }
-        // getSession with graceful fallback in prod
-        let session = null as any;
-        try {
-          const res: any = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession");
-          session = res?.data?.session ?? null;
-        } catch (e: any) {
-          debug.log("auth", "gate.getSession.timeout", { message: e?.message });
-          // try a quick refresh as fallback
+
+        // Helper to parse a session directly from localStorage if SDK stalls
+        const readLocalSession = (): any | null => {
           try {
-            const rf: any = await withTimeout(supabase.auth.refreshSession(), 5000, "auth.refreshSession");
-            session = rf?.data?.session ?? null;
-          } catch (e2: any) {
-            debug.log("auth", "gate.refresh.timeout", { message: e2?.message });
+            const now = Date.now();
+            const tryParse = (raw: string | null) => {
+              if (!raw) return null;
+              try { return JSON.parse(raw); } catch { return null; }
+            };
+
+            // Prefer custom storage key if present
+            const custom = tryParse(window.localStorage.getItem("obrador-auth"));
+            const sbKey = (() => {
+              try {
+                for (let i = 0; i < window.localStorage.length; i++) {
+                  const k = window.localStorage.key(i) || "";
+                  if (/^sb-.*-auth-token$/.test(k)) return k;
+                }
+              } catch {}
+              return null;
+            })();
+            const sbVal = sbKey ? tryParse(window.localStorage.getItem(sbKey)) : null;
+
+            // Supabase v2 stores { currentSession, expiresAt }
+            const pickSession = (obj: any) => obj?.currentSession || obj?.session || obj?.data?.session || null;
+            let sess = pickSession(custom) || pickSession(sbVal);
+            if (!sess) return null;
+
+            const expiresAtMs = (sess?.expires_at ? sess.expires_at * 1000 : (custom?.expiresAt || sbVal?.expiresAt || 0)) as number;
+            const expired = !!expiresAtMs && expiresAtMs < now - 10_000; // 10s clock skew
+            debug.log("auth", "gate.localSession.inspect", { hasCustom: !!custom, hasSb: !!sbVal, expired });
+            if (expired) return null;
+            return sess;
+          } catch (e: any) {
+            debug.log("auth", "gate.localSession.error", { message: e?.message });
+            return null;
+          }
+        };
+
+        // getSession with graceful fallback and tiny backoff
+        let session: any = null;
+        for (let attempt = 0; attempt < 2 && !session; attempt++) {
+          try {
+            const res: any = await withTimeout(supabase.auth.getSession(), 9000, `auth.getSession#a${attempt}`);
+            session = res?.data?.session ?? null;
+            if (session) break;
+          } catch (e: any) {
+            debug.log("auth", "gate.getSession.timeout", { attempt, message: e?.message });
+          }
+          if (!session) {
+            try {
+              const rf: any = await withTimeout(supabase.auth.refreshSession(), 7000, `auth.refreshSession#a${attempt}`);
+              session = rf?.data?.session ?? null;
+            } catch (e2: any) {
+              debug.log("auth", "gate.refresh.timeout", { attempt, message: e2?.message });
+            }
+          }
+          if (!session && attempt === 0) {
+            // Final fallback before giving up: read from localStorage
+            const localSess = readLocalSession();
+            if (localSess) {
+              debug.log("auth", "gate.localSession.used", { source: "attempt0-fallback" });
+              session = localSess;
+              break;
+            }
+            await new Promise(r => setTimeout(r, 400));
           }
         }
+
+        if (!session) {
+          // One last try: purely from storage
+          const localSess = readLocalSession();
+          if (localSess) {
+            debug.log("auth", "gate.localSession.used", { source: "final" });
+            session = localSess;
+          }
+        }
+
         const u = session?.user;
         if (!u) { setError("Inicia sesión para continuar"); setAllowed(false); return; }
 
@@ -52,7 +115,7 @@ export function useProfileGate() {
           .select("role,nombre")
           .eq("user_id", u.id)
           .maybeSingle() as unknown as Promise<any>;
-        const sel = await withTimeout(selPromise, 6000, "profiles.select") as any;
+        const sel = await withTimeout(selPromise, 8000, "profiles.select") as any;
         const data = sel?.data as { role: UserRole; nombre: string } | null;
         const err = sel?.error as { message?: string } | null;
         if (err) { setError("No se pudo conectar a la base de datos"); setAllowed(false); return; }
@@ -70,7 +133,7 @@ export function useProfileGate() {
             })
             .select("role,nombre")
             .single() as unknown as Promise<any>;
-          const ins = await withTimeout(insPromise, 6000, "profiles.insert") as any;
+          const ins = await withTimeout(insPromise, 8000, "profiles.insert") as any;
           const inserted = ins?.data as { role: UserRole; nombre: string } | null;
           const insErr = ins?.error as { message?: string } | null;
           if (insErr || !inserted) { setError("No se pudo crear perfil (DB)"); setAllowed(false); return; }
