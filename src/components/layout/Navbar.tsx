@@ -91,7 +91,7 @@ const Navbar = () => {
 
   // Nuevo: estado de conectividad
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true)
-    // 👇 Añade esta utilidad arriba (fuera del useEffect)
+  
   async function tryRecoverSupabaseSessionFromStorage(): Promise<Session | null> {
     try {
       const sbKey = Object.keys(localStorage)
@@ -258,65 +258,38 @@ const Navbar = () => {
     const init = async () => {
       setAuthLoading(true)
       setAuthWarning(null)
-      const t0 = performance.now()
       
       let session = null;
       try {
         const { data: { session: sess } } = await withTimeout(
           supabase.auth.getSession(),
-          8000, // Aumentado a 8 segundos para Netlify
-          'auth.getSession'
-        )
+          8000,
+          "auth.getSession"
+        );
         session = sess;
-        const t1 = performance.now()
-        logPerf("auth.getSession", { duration_ms: +(t1 - t0).toFixed(1), hasSession: !!session })
+        logPerf("auth.getSession", { hasSession: !!session });
       } catch (err: any) {
-        logPerf("auth.getSession failure", { message: err?.message })
-        
-        // Fallback: intentar leer de localStorage si getSession falla
-        try {
-          const customKey = localStorage.getItem("obrador-auth");
-          const sbKey = Object.keys(localStorage)
-            .find(k => k.startsWith("sb-") && k.includes("-auth-token"));
-          const stored = customKey || (sbKey ? localStorage.getItem(sbKey) : null);
-          
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            
-            // Manejar diferentes estructuras de localStorage de Supabase
-            let fallbackSession = null;
-            
-            // Estructura v2: { currentSession: {...} }
-            if (parsed.currentSession) {
-              fallbackSession = parsed.currentSession;
-            }
-            // Estructura v1: { session: {...} }  
-            else if (parsed.session) {
-              fallbackSession = parsed.session;
-            }
-            // Estructura directa: { access_token, user, ... }
-            else if (parsed.access_token && parsed.user) {
-              fallbackSession = parsed;
-            }
-            
-            if (fallbackSession?.user && fallbackSession?.access_token) {
-              session = fallbackSession;
-              logPerf("auth.getSession localStorage fallback", { success: true });
-            }
-          }
-        } catch (fallbackErr) {
-          console.warn("[NAVBAR] localStorage fallback failed:", fallbackErr);
+        logPerf("auth.getSession failure", { message: err?.message });
+
+        // ✅ Intento 1: recuperar correctamente “inyectando” en el cliente
+        session = await tryRecoverSupabaseSessionFromStorage();
+
+        // (Opcional) Intento 2: si sigue sin sesión pero hay red, prueba un refresh “forzado”
+        if (!session && navigator.onLine) {
+          try {
+            const { data, error } = await supabase.auth.refreshSession();
+            if (!error) session = data.session ?? null;
+          } catch {}
         }
-        
+
         if (!session) {
           const msg = !isOnline
             ? "Sin conexión. Revisa tu red."
-            : (err?.message || "No se pudo conectar con autenticación")
-          // eslint-disable-next-line no-console
-          if (import.meta.env.DEV) console.error("[AUTH] init error:", err)
-          setAuthWarning(`${msg}. Reintentar`)
+            : (err?.message || "No se pudo conectar con autenticación");
+          setAuthWarning(`${msg}. Reintentar`);
         }
       }
+
 
       if (!mounted) return
       setSession(session)
