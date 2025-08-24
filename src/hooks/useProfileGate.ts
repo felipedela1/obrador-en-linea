@@ -25,6 +25,7 @@ export function useProfileGate() {
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<{ role: UserRole; nombre: string } | null>(null);
   const [reload, setReload] = useState(0);
+  const [isRunning, setIsRunning] = useState(false); // Prevent concurrent runs
 
   const retry = useCallback(() => { 
     setReload(c => c + 1); 
@@ -34,6 +35,12 @@ export function useProfileGate() {
     let mounted = true;
 
     const run = async () => {
+      if (isRunning) {
+        console.log("[PROFILE_GATE] Already running, skipping...");
+        return;
+      }
+      
+      setIsRunning(true);
       setLoading(true); 
       setAllowed(false); 
       setError(null); 
@@ -53,10 +60,13 @@ export function useProfileGate() {
         // Función helper para leer localStorage
         const getStoredSession = () => {
           try {
-            // Debug: mostrar qué keys hay en localStorage
-            const allKeys = Object.keys(localStorage);
-            const authKeys = allKeys.filter(k => k.includes("auth") || k.includes("sb-"));
-            console.log("[PROFILE_GATE] localStorage keys:", authKeys);
+            // Debug: mostrar qué keys hay en localStorage (solo una vez)
+            if (!(window as any)._profileGateDebugShown) {
+              const allKeys = Object.keys(localStorage);
+              const authKeys = allKeys.filter(k => k.includes("auth") || k.includes("sb-"));
+              console.log("[PROFILE_GATE] localStorage keys:", authKeys);
+              (window as any)._profileGateDebugShown = true;
+            }
             
             const customKey = localStorage.getItem("obrador-auth");
             const sbKey = Object.keys(localStorage)
@@ -66,7 +76,6 @@ export function useProfileGate() {
             console.log("[PROFILE_GATE] Found stored data:", {
               hasCustomKey: !!customKey,
               hasSbKey: !!sbKey,
-              sbKeyName: sbKey,
               hasStoredData: !!stored
             });
             
@@ -266,17 +275,23 @@ export function useProfileGate() {
         setError(msg); 
         setAllowed(false);
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          setIsRunning(false);
+        }
       }
     };
 
     run();
 
-    // Suscribirse a cambios de auth
+    // Suscribirse a cambios de auth (solo eventos importantes)
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       console.log("[PROFILE_GATE] Auth state changed:", event, !!session);
-      if (mounted) {
-        run();
+      if (mounted && (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED')) {
+        // Pequeño delay para evitar race conditions
+        setTimeout(() => {
+          if (mounted) run();
+        }, 100);
       }
     });
 
