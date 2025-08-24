@@ -111,21 +111,78 @@ const Navbar = () => {
 
       const access_token: string | undefined = s?.access_token;
       const refresh_token: string | undefined = s?.refresh_token;
+      const expires_at: number | undefined = s?.expires_at;
 
-      if (!access_token || !refresh_token) return null;
-
-      // ⚠️ Esto es lo importante: "inyectar" la sesión en el cliente Supabase
-      const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
-      if (error) {
-        console.warn("[AUTH] setSession from storage failed:", error.message);
+      if (!access_token || !refresh_token) {
+        console.warn("[AUTH] Invalid session in localStorage - missing tokens");
+        localStorage.removeItem(sbKey);
         return null;
       }
+
+      // Verificar si el token está expirado
+      if (expires_at && expires_at * 1000 < Date.now()) {
+        console.warn("[AUTH] Session in localStorage is expired");
+        localStorage.removeItem(sbKey);
+        return null;
+      }
+
+      // ⚠️ IMPORTANTE: Solo intentar setSession si los datos parecen válidos
+      // y NO están expirados
+      console.log("[AUTH] Attempting to restore session from localStorage");
+      const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
+      
+      if (error) {
+        console.warn("[AUTH] setSession from storage failed:", error.message);
+        // Si falla, limpiar el localStorage corrupto
+        localStorage.removeItem(sbKey);
+        return null;
+      }
+      
+      console.log("[AUTH] Successfully restored session from localStorage");
       return data.session ?? null;
     } catch (e) {
       console.warn("[AUTH] tryRecoverSupabaseSessionFromStorage error:", e);
+      // En caso de error, limpiar cualquier dato corrupto
+      const sbKeys = Object.keys(localStorage).filter(k => k.startsWith("sb-") && k.includes("-auth-token"));
+      sbKeys.forEach(k => localStorage.removeItem(k));
       return null;
     }
   }
+
+  // Función para limpiar localStorage corrupto al inicio
+  const cleanCorruptedLocalStorage = () => {
+    try {
+      const sbKeys = Object.keys(localStorage).filter(k => k.startsWith("sb-") && k.includes("-auth-token"));
+      
+      for (const key of sbKeys) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (!raw) continue;
+          
+          const parsed = JSON.parse(raw);
+          const s = parsed?.currentSession ?? parsed?.session ?? parsed;
+          
+          // Verificar estructura básica
+          if (!s?.access_token || !s?.refresh_token) {
+            console.warn("[AUTH] Removing corrupted localStorage entry:", key);
+            localStorage.removeItem(key);
+            continue;
+          }
+          
+          // Verificar expiración
+          if (s.expires_at && s.expires_at * 1000 < Date.now()) {
+            console.warn("[AUTH] Removing expired localStorage entry:", key);
+            localStorage.removeItem(key);
+          }
+        } catch (e) {
+          console.warn("[AUTH] Removing unparseable localStorage entry:", key);
+          localStorage.removeItem(key);
+        }
+      }
+    } catch (e) {
+      console.warn("[AUTH] Error cleaning localStorage:", e);
+    }
+  };
 
   // Detectar rutas que necesitan fondo oscuro
   useEffect(() => {
@@ -256,6 +313,11 @@ const Navbar = () => {
     }
 
     const init = async () => {
+      setAuthLoading(true)
+      setAuthWarning(null)
+      
+      // Limpiar localStorage corrupto antes de intentar cualquier autenticación
+      cleanCorruptedLocalStorage();
       
       let session = null;
       try {
