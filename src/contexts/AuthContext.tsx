@@ -265,52 +265,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setAuthLoading(true);
       setAuthWarning(null);
       
-      // Limpiar localStorage corrupto antes de intentar cualquier autenticación
       cleanCorruptedLocalStorage();
       
-      let session = null;
-      try {
-        const { data: { session: sess } } = await withTimeout(
-          supabase.auth.getSession(),
-          8000,
-          "auth.getSession"
-        );
-        session = sess;
-        logPerf("auth.getSession", { hasSession: !!session });
-      } catch (err: any) {
-        logPerf("auth.getSession failure", { message: err?.message });
+      // Intenta obtener la sesión del cliente Supabase.
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      logPerf("auth.init getSession", { hasSession: !!currentSession });
 
-        // Intento 1: recuperar correctamente "inyectando" en el cliente
-        session = await tryRecoverSupabaseSessionFromStorage();
-
-        // Intento 2: si sigue sin sesión pero hay red, prueba un refresh
-        if (!session && navigator.onLine) {
-          try {
-            const { data, error } = await supabase.auth.refreshSession();
-            if (!error) session = data.session ?? null;
-          } catch {}
-        }
-
-        if (!session) {
-          const msg = !isOnline
-            ? "Sin conexión. Revisa tu red."
-            : (err?.message || "No se pudo conectar con autenticación");
-          setAuthWarning(`${msg}. Reintentar`);
-        }
-      }
-
-      if (!mounted) return;
-      setSession(session);
-      if (session?.user) {
-        setEmailVerified(!!session.user.email_confirmed_at);
-        await upsertProfileIfNeeded(session.user);
-      } else {
-        setProfileRole(null);
-        setProfileName(null);
-        setEmailVerified(null);
+      // Si no hay sesión activa en el cliente, intenta recuperarla desde localStorage.
+      if (!currentSession) {
+        logPerf("auth.init", { message: "No active session, attempting recovery from storage." });
+        // tryRecover... llama a setSession, lo que disparará onAuthStateChange si tiene éxito.
+        await tryRecoverSupabaseSessionFromStorage();
       }
       
-      if (mounted) setAuthLoading(false);
+      // Si después de todo no hay sesión, onAuthStateChange se disparará con
+      // un evento INITIAL_SESSION y newSession=null, lo que pondrá authLoading a false.
     };
 
     init();
@@ -318,14 +287,26 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const { data: listener } = supabase.auth.onAuthStateChange(async (evt, newSession) => {
       logPerf("auth.onAuthStateChange", { event: evt, hasSession: !!newSession });
       if (!mounted) return;
-      setSession(newSession);
-      if (newSession?.user) {
+
+      // Una sesión es válida si tenemos un newSession.
+      // Los eventos relevantes son INITIAL_SESSION (carga inicial), SIGNED_IN, y TOKEN_REFRESHED.
+      if (newSession) {
+        setSession(newSession);
         setEmailVerified(!!newSession.user.email_confirmed_at);
-        await upsertProfileIfNeeded(newSession.user);
-      } else {
+        // Solo buscamos perfil si hay un usuario en la sesión.
+        if (newSession.user) {
+          await upsertProfileIfNeeded(newSession.user);
+        }
+        // Una vez que tenemos sesión y perfil, la carga ha terminado.
+        setAuthLoading(false);
+      } else if (evt === 'SIGNED_OUT' || (evt === 'INITIAL_SESSION' && !newSession)) {
+        // Si el evento es SIGNED_OUT, o si en la carga inicial no hay sesión,
+        // limpiamos todo y terminamos la carga.
+        setSession(null);
         setProfileRole(null);
         setProfileName(null);
         setEmailVerified(null);
+        setAuthLoading(false);
       }
     });
 
@@ -338,24 +319,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const signOut = async () => {
     if (isSigningOut) return;
     setIsSigningOut(true);
-    const t0 = performance.now();
+    logPerf("auth.signOut", { scope: "global" });
     try {
       const { error } = await supabase.auth.signOut({ scope: "global" });
-      const t1 = performance.now();
-      logPerf("auth.signOut", { duration_ms: +(t1 - t0).toFixed(1), hadError: !!error });
       if (error) throw error;
 
-      Object.keys(localStorage)
-        .filter(k => k.startsWith("sb-") && k.includes("-auth-token"))
-        .forEach(k => localStorage.removeItem(k));
-
+      // Limpiar estado local inmediatamente
       setSession(null);
       setProfileRole(null);
       setProfileName(null);
       setEmailVerified(null);
-      window.location.replace("/");
+      
+      // Limpiar cualquier residuo de sesión en localStorage
+      Object.keys(localStorage)
+        .filter(k => k.startsWith("sb-") && k.includes("-auth-token"))
+        .forEach(k => localStorage.removeItem(k));
+
     } catch (e: any) {
       logPerf("auth.signOut exception", { message: e.message });
+      // Re-throw para que el UI pueda manejarlo
       throw e;
     } finally {
       setIsSigningOut(false);
@@ -368,20 +350,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setResent(false);
     try {
       const { error } = await supabase.auth.resend({
-        type: "signup",
+        type: 'signup',
         email: user.email,
-        options: { emailRedirectTo: window.location.origin + "/auth-confirm" }
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth-confirm`
+        }
       });
       if (error) throw error;
       setResent(true);
     } catch (e: any) {
+      // Re-throw para que el UI pueda manejarlo
       throw e;
     } finally {
       setResending(false);
     }
   };
 
-  const value: AuthContextType = {
+  const value = {
     session,
     user,
     profileRole,
@@ -396,8 +381,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     resendVerification,
     resending,
     resent,
-    isSigningOut,
+    isSigningOut
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
