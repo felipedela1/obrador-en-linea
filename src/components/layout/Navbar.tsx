@@ -91,6 +91,41 @@ const Navbar = () => {
 
   // Nuevo: estado de conectividad
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true)
+    // 👇 Añade esta utilidad arriba (fuera del useEffect)
+  async function tryRecoverSupabaseSessionFromStorage(): Promise<Session | null> {
+    try {
+      const sbKey = Object.keys(localStorage)
+        .find(k => k.startsWith("sb-") && k.includes("-auth-token"));
+      if (!sbKey) return null;
+
+      const raw = localStorage.getItem(sbKey);
+      if (!raw) return null;
+
+      const parsed = JSON.parse(raw);
+
+      // Supabase puede guardar distintas formas entre versiones:
+      // v2: { currentSession: { access_token, refresh_token, user, ... } }
+      // v1: { session: { ... } }
+      // directo: { access_token, refresh_token, user, ... }
+      const s = parsed?.currentSession ?? parsed?.session ?? parsed;
+
+      const access_token: string | undefined = s?.access_token;
+      const refresh_token: string | undefined = s?.refresh_token;
+
+      if (!access_token || !refresh_token) return null;
+
+      // ⚠️ Esto es lo importante: "inyectar" la sesión en el cliente Supabase
+      const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
+      if (error) {
+        console.warn("[AUTH] setSession from storage failed:", error.message);
+        return null;
+      }
+      return data.session ?? null;
+    } catch (e) {
+      console.warn("[AUTH] tryRecoverSupabaseSessionFromStorage error:", e);
+      return null;
+    }
+  }
 
   // Detectar rutas que necesitan fondo oscuro
   useEffect(() => {

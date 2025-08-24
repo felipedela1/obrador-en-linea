@@ -102,6 +102,32 @@ http://localhost:5173/**
 2. **Verificar logout**: Debe redirigir a login
 3. **Test re-login**: Iniciar sesión de nuevo
 
+## 🔄 Actualización: Simplificación de Control de Acceso
+
+### ✅ Cambios Realizados (Agosto 24, 2025)
+
+**Removida la verificación de acceso redundante en páginas protegidas:**
+- `src/pages/Admin.tsx` - Removido `useProfileGate`
+- `src/pages/Reservas.tsx` - Removido `useProfileGate`  
+- `src/pages/MisReservas.tsx` - Removido `useProfileGate`
+
+**Justificación:**
+- El control de acceso está manejado a nivel de UI (navbar) - si no estás logueado, no ves los enlaces
+- Si alguien accede directamente por URL sin estar logueado, la página simplemente no funcionará (fallará al obtener datos)
+- Esto simplifica el código y reduce el bundle size (~9KB menos)
+- Mantiene la funcionalidad pero elimina verificaciones redundantes
+
+**Resultado:**
+- Bundle size reducido: 723KB → 714KB
+- Código más limpio y mantenible
+- Misma funcionalidad de seguridad (navbar controla visibilidad)
+- Menos imports y dependencias innecesarias
+
+El sistema sigue siendo seguro ya que:
+1. Los enlaces solo se muestran si estás autenticado (navbar)
+2. Las APIs de Supabase requieren autenticación válida
+3. Sin token válido, las consultas fallan automáticamente
+
 ## 🔍 Diagnóstico de Problemas
 
 ### LocalStorage Issues

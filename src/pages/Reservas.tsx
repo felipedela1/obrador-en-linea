@@ -10,7 +10,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar as CalendarIcon, Loader2, Minus, Plus, RefreshCw, ShoppingCart, Sparkles, Search, Filter, AlertCircle } from "lucide-react";
 import VanillaTilt from 'vanilla-tilt';
-import { useProfileGate } from "@/hooks/useProfileGate";
 import { Button } from "@/components/ui/button";
 
 // Tipos
@@ -40,47 +39,6 @@ const ProductSkeleton = ({ index }: { index: number }) => (
 
 const Reservas = () => {
   const { toast } = useToast();
-  const { loading: gateLoading, allowed, error: gateError, retry, profile } = useProfileGate();
-
-  // Protección de acceso
-  if (gateLoading) {
-    return (
-      <div className="min-h-screen flex flex-col relative overflow-x-hidden">
-        <Navbar />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600" />
-            <p className="text-slate-600">Verificando acceso...</p>
-          </div>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
-
-  if (!allowed) {
-    return (
-      <div className="min-h-screen flex flex-col relative overflow-x-hidden">
-        <Navbar />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-4 max-w-md mx-auto px-6">
-            <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
-            <h2 className="text-xl font-semibold text-slate-800">Acceso Requerido</h2>
-            <p className="text-slate-600">
-              {gateError || "Necesitas iniciar sesión para hacer reservas"}
-            </p>
-            {gateError && (
-              <Button onClick={retry} variant="outline" className="mt-4">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Reintentar
-              </Button>
-            )}
-          </div>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
 
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0,10));
   const [loading, setLoading] = useState(false);

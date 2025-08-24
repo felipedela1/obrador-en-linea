@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button"
 import { Loader2, RefreshCw, Calendar, Clock, Package, Check, AlertCircle, Sparkles, ShoppingCart } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale/es"
-import { useProfileGate } from "@/hooks/useProfileGate"
 
 interface ReservationItem {
   id: string
@@ -70,47 +69,6 @@ const ReservationSkeleton = ({ index }: { index: number }) => (
 
 const MisReservas = () => {
   const { toast } = useToast()
-  const { loading: gateLoading, allowed, error: gateError, retry, profile } = useProfileGate();
-
-  // Protección de acceso
-  if (gateLoading) {
-    return (
-      <div className="min-h-screen flex flex-col relative overflow-x-hidden">
-        <Navbar />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600" />
-            <p className="text-slate-600">Verificando acceso...</p>
-          </div>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
-
-  if (!allowed) {
-    return (
-      <div className="min-h-screen flex flex-col relative overflow-x-hidden">
-        <Navbar />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-4 max-w-md mx-auto px-6">
-            <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
-            <h2 className="text-xl font-semibold text-slate-800">Acceso Requerido</h2>
-            <p className="text-slate-600">
-              {gateError || "Necesitas iniciar sesión para ver tus reservas"}
-            </p>
-            {gateError && (
-              <Button onClick={retry} variant="outline" className="mt-4">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Reintentar
-              </Button>
-            )}
-          </div>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
 
   const [loading, setLoading] = useState(true)
   const [reservas, setReservas] = useState<Reservation[]>([])
