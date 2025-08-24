@@ -5,6 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Copy, RefreshCw, Trash2 } from "lucide-react";
 import { testSupabaseConnectivity } from "@/lib/utils";
 
+// Extend window type for debug utilities
+declare global {
+  interface Window {
+    debugUtils: any;
+  }
+}
+
 export default function Debug() {
   const [info, setInfo] = useState<any>({});
   const [loading, setLoading] = useState(false);
@@ -110,6 +117,39 @@ export default function Debug() {
 
   useEffect(() => {
     collectInfo();
+  }, []);
+
+  // Global debug helpers for browser console access
+  useEffect(() => {
+    // Make debug utilities available globally for console access
+    if (typeof window !== 'undefined') {
+      window.debugUtils = {
+        clearAuth: () => {
+          localStorage.removeItem('obrador-auth');
+          localStorage.removeItem('sb-upkjxuvwttqwemsoafcq-auth-token');
+          window.location.reload();
+        },
+        showAuth: () => {
+          const data = JSON.parse(localStorage.getItem('obrador-auth') || 'null');
+          console.log('Auth data:', data);
+          return data;
+        },
+        testSupabase: async () => {
+          const result = await testSupabaseConnectivity();
+          console.log('Supabase connectivity:', result);
+          return result;
+        },
+        goToDebug: () => {
+          window.location.href = '/debug';
+        }
+      };
+      
+      console.log('🐛 Debug utilities available:');
+      console.log('- debugUtils.clearAuth() - Clear all auth data');
+      console.log('- debugUtils.showAuth() - Show current auth data');
+      console.log('- debugUtils.testSupabase() - Test Supabase connectivity');
+      console.log('- debugUtils.goToDebug() - Navigate to debug page');
+    }
   }, []);
 
   const copyToClipboard = () => {
