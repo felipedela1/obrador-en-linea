@@ -28,8 +28,21 @@ export function useProfileGate() {
         if (typeof navigator !== "undefined" && navigator.onLine === false) {
           setError("Sin conexión. Revisa tu red."); setAllowed(false); return;
         }
-        const { data: { session }, error: getErr } = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession");
-        if (getErr) { setError(getErr.message || "Error de autenticación"); setAllowed(false); return; }
+        // getSession with graceful fallback in prod
+        let session = null as any;
+        try {
+          const res: any = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession");
+          session = res?.data?.session ?? null;
+        } catch (e: any) {
+          debug.log("auth", "gate.getSession.timeout", { message: e?.message });
+          // try a quick refresh as fallback
+          try {
+            const rf: any = await withTimeout(supabase.auth.refreshSession(), 5000, "auth.refreshSession");
+            session = rf?.data?.session ?? null;
+          } catch (e2: any) {
+            debug.log("auth", "gate.refresh.timeout", { message: e2?.message });
+          }
+        }
         const u = session?.user;
         if (!u) { setError("Inicia sesión para continuar"); setAllowed(false); return; }
 
@@ -69,7 +82,9 @@ export function useProfileGate() {
         setProfile(data); setAllowed(true); setError(null);
       } catch (e: any) {
         debug.log("auth", "profileGate.exception", { message: e?.message });
-        setError(e?.message || "Error de red"); setAllowed(false);
+        // Distinguish offline vs transient
+        const msg = typeof navigator !== 'undefined' && navigator.onLine === false ? "Sin conexión. Revisa tu red." : (e?.message || "Error de red");
+        setError(msg); setAllowed(false);
       } finally {
         if (mounted) setLoading(false);
       }

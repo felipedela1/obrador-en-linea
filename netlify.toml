@@ -1,0 +1,14 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Optional: helps Netlify Dev
+[dev]
+  command = "npm run dev"
+  framework = "vite"
+
+# SPA fallback (also have public/_redirects, this is a backup)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
