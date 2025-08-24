@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Copy, RefreshCw } from "lucide-react";
+import { Copy, RefreshCw, Trash2 } from "lucide-react";
 import { testSupabaseConnectivity } from "@/lib/utils";
 
 export default function Debug() {
@@ -36,6 +36,10 @@ export default function Debug() {
           const value = localStorage.getItem(key);
           if (value) {
             const parsed = JSON.parse(value);
+            const now = Date.now() / 1000;
+            const expiresAt = parsed.expires_at;
+            const isExpired = expiresAt && expiresAt < now;
+            
             result.localStorage[key] = {
               exists: true,
               size: value.length,
@@ -43,7 +47,11 @@ export default function Debug() {
               hasCurrentSession: !!parsed.currentSession,
               hasSession: !!parsed.session,
               hasUser: !!(parsed.currentSession?.user || parsed.session?.user || parsed.user),
-              hasAccessToken: !!(parsed.currentSession?.access_token || parsed.session?.access_token || parsed.access_token)
+              hasAccessToken: !!(parsed.currentSession?.access_token || parsed.session?.access_token || parsed.access_token),
+              expiresAt: expiresAt,
+              isExpired: isExpired,
+              timeToExpiry: expiresAt ? Math.max(0, expiresAt - now) : null,
+              userEmail: (parsed.currentSession?.user || parsed.session?.user || parsed.user)?.email
             };
           }
         } catch (e) {
@@ -108,6 +116,18 @@ export default function Debug() {
     navigator.clipboard.writeText(JSON.stringify(info, null, 2));
   };
 
+  const clearAuthData = () => {
+    try {
+      const keys = Object.keys(localStorage);
+      const authKeys = keys.filter(k => k.includes("auth") || k.includes("sb-"));
+      authKeys.forEach(key => localStorage.removeItem(key));
+      console.log("Cleared auth data:", authKeys);
+      collectInfo(); // Refresh
+    } catch (e) {
+      console.error("Failed to clear auth data:", e);
+    }
+  };
+
   return (
     <div className="min-h-screen p-6 bg-slate-50">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -121,6 +141,10 @@ export default function Debug() {
             <Button onClick={copyToClipboard} variant="outline">
               <Copy className="w-4 h-4 mr-2" />
               Copy
+            </Button>
+            <Button onClick={clearAuthData} variant="destructive">
+              <Trash2 className="w-4 h-4 mr-2" />
+              Clear Auth Data
             </Button>
           </div>
         </div>

@@ -55,3 +55,43 @@ export async function testSupabaseConnectivity() {
     };
   }
 }
+
+// Add localStorage validation utility
+export function validateStoredSession(stored: string) {
+  try {
+    const parsed = JSON.parse(stored);
+    console.log("[VALIDATE] Parsed session structure:", Object.keys(parsed));
+
+    // Check if token is expired
+    const now = Date.now() / 1000; // Unix timestamp in seconds
+    const expiresAt = parsed.expires_at;
+
+    if (expiresAt && expiresAt < now) {
+      console.log("[VALIDATE] Token expired:", { expiresAt, now, expired: true });
+      return null;
+    }
+
+    // Validate required fields
+    const hasUser = !!parsed.user;
+    const hasToken = !!parsed.access_token;
+    const hasValidUser = hasUser && parsed.user.id && parsed.user.email;
+
+    console.log("[VALIDATE] Session validation:", {
+      hasUser,
+      hasToken,
+      hasValidUser,
+      userEmail: parsed.user?.email,
+      tokenLength: parsed.access_token?.length,
+    });
+
+    if (!hasValidUser || !hasToken) {
+      console.log("[VALIDATE] Invalid session structure");
+      return null;
+    }
+
+    return parsed;
+  } catch (error) {
+    console.error("[VALIDATE] Parse error:", error);
+    return null;
+  }
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { UserRole } from "@/types/models";
+import { validateStoredSession } from "@/lib/utils";
 
 // Timeout helper robusto para Netlify
 const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
@@ -54,6 +55,14 @@ export function useProfileGate() {
           return;
         }
 
+        // Debug: información del entorno
+        console.log("[PROFILE_GATE] Environment info:", {
+          isDev: import.meta.env.DEV,
+          isProd: import.meta.env.PROD,
+          mode: import.meta.env.MODE,
+          userAgent: navigator.userAgent.includes('Netlify') ? 'Netlify' : 'Other'
+        });
+
         // Intentar obtener sesión con timeout robusto y fallback
         let session = null;
         
@@ -80,34 +89,23 @@ export function useProfileGate() {
             });
             
             if (stored) {
-              const parsed = JSON.parse(stored);
-              console.log("[PROFILE_GATE] Parsed data structure:", Object.keys(parsed));
+              console.log("[PROFILE_GATE] Raw stored data length:", stored.length);
               
-              // Manejar diferentes estructuras de localStorage de Supabase
-              let sess = null;
-              
-              // Estructura v2: { currentSession: {...} }
-              if (parsed.currentSession) {
-                sess = parsed.currentSession;
-              }
-              // Estructura v1: { session: {...} }  
-              else if (parsed.session) {
-                sess = parsed.session;
-              }
-              // Estructura directa: { access_token, user, ... }
-              else if (parsed.access_token && parsed.user) {
-                sess = parsed;
-              }
-              
-              if (sess?.user && sess?.access_token) {
+              // Use validation utility
+              const validatedSession = validateStoredSession(stored);
+              if (validatedSession) {
                 console.log("[PROFILE_GATE] Found valid session in localStorage");
-                return sess;
+                return validatedSession;
               } else {
-                console.log("[PROFILE_GATE] Invalid session structure:", { 
-                  hasUser: !!sess?.user, 
-                  hasToken: !!sess?.access_token,
-                  sessionType: typeof sess 
-                });
+                console.log("[PROFILE_GATE] Stored session is invalid or expired");
+                // Clean up invalid data
+                try {
+                  if (customKey) localStorage.removeItem("obrador-auth");
+                  if (sbKey) localStorage.removeItem(sbKey);
+                  console.log("[PROFILE_GATE] Cleaned up invalid localStorage data");
+                } catch (e) {
+                  console.warn("[PROFILE_GATE] Failed to clean localStorage:", e);
+                }
               }
             }
           } catch (e) {
