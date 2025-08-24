@@ -224,35 +224,61 @@ const Navbar = () => {
       setAuthLoading(true)
       setAuthWarning(null)
       const t0 = performance.now()
+      
+      let session = null;
       try {
-        const { data: { session } } = await withTimeout(
+        const { data: { session: sess } } = await withTimeout(
           supabase.auth.getSession(),
           8000, // Aumentado a 8 segundos para Netlify
           'auth.getSession'
         )
+        session = sess;
         const t1 = performance.now()
         logPerf("auth.getSession", { duration_ms: +(t1 - t0).toFixed(1), hasSession: !!session })
-        if (!mounted) return
-        setSession(session)
-        if (session?.user) {
-          setEmailVerified(!!session.user.email_confirmed_at)
-          await upsertProfileIfNeeded(session.user)
-        } else {
-          setProfileRole(null)
-          setProfileName(null)
-          setEmailVerified(null)
-        }
       } catch (err: any) {
-        const msg = !isOnline
-          ? "Sin conexión. Revisa tu red."
-          : (err?.message || "No se pudo conectar con autenticación")
-        logPerf("auth.getSession failure", { message: msg })
-        // eslint-disable-next-line no-console
-        if (import.meta.env.DEV) console.error("[AUTH] init error:", err)
-        setAuthWarning(`${msg}. Reintentar`)
-      } finally {
-        if (mounted) setAuthLoading(false)
+        logPerf("auth.getSession failure", { message: err?.message })
+        
+        // Fallback: intentar leer de localStorage si getSession falla
+        try {
+          const customKey = localStorage.getItem("obrador-auth");
+          const sbKey = Object.keys(localStorage)
+            .find(k => k.startsWith("sb-") && k.includes("-auth-token"));
+          const stored = customKey || (sbKey ? localStorage.getItem(sbKey) : null);
+          
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const fallbackSession = parsed?.currentSession || parsed?.session || parsed;
+            if (fallbackSession?.user && fallbackSession?.access_token) {
+              session = fallbackSession;
+              logPerf("auth.getSession localStorage fallback", { success: true });
+            }
+          }
+        } catch (fallbackErr) {
+          console.warn("[NAVBAR] localStorage fallback failed:", fallbackErr);
+        }
+        
+        if (!session) {
+          const msg = !isOnline
+            ? "Sin conexión. Revisa tu red."
+            : (err?.message || "No se pudo conectar con autenticación")
+          // eslint-disable-next-line no-console
+          if (import.meta.env.DEV) console.error("[AUTH] init error:", err)
+          setAuthWarning(`${msg}. Reintentar`)
+        }
       }
+
+      if (!mounted) return
+      setSession(session)
+      if (session?.user) {
+        setEmailVerified(!!session.user.email_confirmed_at)
+        await upsertProfileIfNeeded(session.user)
+      } else {
+        setProfileRole(null)
+        setProfileName(null)
+        setEmailVerified(null)
+      }
+      
+      if (mounted) setAuthLoading(false)
     }
 
     init()

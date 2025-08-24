@@ -16,6 +16,7 @@ import Reservas from "./pages/Reservas";
 import MisReservas from "./pages/MisReservas";
 import ResetPasswordRequest from "./pages/ResetPasswordRequest";
 import UpdatePassword from "./pages/UpdatePassword";
+import Debug from "./pages/Debug";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthIntegrity } from "@/hooks/useAuthIntegrity";
 import { checkEnvironment } from "@/lib/utils";
@@ -98,6 +99,7 @@ const AppInner = () => {
       <Route path="/check-email" element={<CheckEmail />} />
       <Route path="/auth-confirm" element={<AuthConfirm />} />
       <Route path="/admin" element={<Admin />} />
+      <Route path="/debug" element={<Debug />} />
       <Route path="/reset-password" element={<ResetPasswordRequest />} />
       <Route path="/update-password" element={<UpdatePassword />} />
       <Route path="*" element={<NotFound />} />

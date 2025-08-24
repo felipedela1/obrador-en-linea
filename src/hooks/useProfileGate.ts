@@ -49,6 +49,45 @@ export function useProfileGate() {
 
         // Intentar obtener sesión con timeout robusto y fallback
         let session = null;
+        
+        // Función helper para leer localStorage
+        const getStoredSession = () => {
+          try {
+            // Debug: mostrar qué keys hay en localStorage
+            const allKeys = Object.keys(localStorage);
+            const authKeys = allKeys.filter(k => k.includes("auth") || k.includes("sb-"));
+            console.log("[PROFILE_GATE] localStorage keys:", authKeys);
+            
+            const customKey = localStorage.getItem("obrador-auth");
+            const sbKey = Object.keys(localStorage)
+              .find(k => k.startsWith("sb-") && k.includes("-auth-token"));
+            const stored = customKey || (sbKey ? localStorage.getItem(sbKey) : null);
+            
+            console.log("[PROFILE_GATE] Found stored data:", {
+              hasCustomKey: !!customKey,
+              hasSbKey: !!sbKey,
+              sbKeyName: sbKey,
+              hasStoredData: !!stored
+            });
+            
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              console.log("[PROFILE_GATE] Parsed data structure:", Object.keys(parsed));
+              const sess = parsed?.currentSession || parsed?.session || parsed;
+              if (sess?.user && sess?.access_token) {
+                console.log("[PROFILE_GATE] Found valid session in localStorage");
+                return sess;
+              } else {
+                console.log("[PROFILE_GATE] Invalid session structure:", { hasUser: !!sess?.user, hasToken: !!sess?.access_token });
+              }
+            }
+          } catch (e) {
+            console.warn("[PROFILE_GATE] localStorage read failed:", e);
+          }
+          return null;
+        };
+
+        // Intentar getSession con fallback inmediato si falla
         try {
           const res = await withTimeout(
             supabase.auth.getSession(), 
@@ -56,9 +95,11 @@ export function useProfileGate() {
             "auth.getSession"
           );
           session = res?.data?.session ?? null;
+          console.log("[PROFILE_GATE] getSession succeeded:", !!session);
         } catch (e: any) {
           console.warn("[PROFILE_GATE] getSession timeout, trying refresh:", e.message);
-          // Fallback: intentar refresh
+          
+          // Primer fallback: refreshSession
           try {
             const refreshRes = await withTimeout(
               supabase.auth.refreshSession(), 
@@ -66,27 +107,16 @@ export function useProfileGate() {
               "auth.refreshSession"
             );
             session = refreshRes?.data?.session ?? null;
+            console.log("[PROFILE_GATE] refresh succeeded:", !!session);
           } catch (e2: any) {
             console.warn("[PROFILE_GATE] refresh also failed:", e2.message);
-            
-            // Último fallback: leer directamente del localStorage
-            try {
-              const customKey = localStorage.getItem("obrador-auth");
-              const sbKey = Object.keys(localStorage)
-                .find(k => k.startsWith("sb-") && k.includes("-auth-token"));
-              const stored = customKey || (sbKey ? localStorage.getItem(sbKey) : null);
-              
-              if (stored) {
-                const parsed = JSON.parse(stored);
-                session = parsed?.currentSession || parsed?.session || null;
-                if (session) {
-                  console.log("[PROFILE_GATE] Using localStorage fallback session");
-                }
-              }
-            } catch (e3) {
-              console.error("[PROFILE_GATE] localStorage fallback failed:", e3);
-            }
           }
+        }
+
+        // Si ambos fallan, usar localStorage como último recurso
+        if (!session) {
+          console.log("[PROFILE_GATE] Attempting localStorage fallback...");
+          session = getStoredSession();
         }
 
         const user = session?.user;
