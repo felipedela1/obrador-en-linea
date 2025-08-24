@@ -3,30 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Session, User as SupaUser } from '@supabase/supabase-js';
 import type { UserRole } from '@/types/models';
 
-// Lightweight perf logging helper (only logs in dev)
-const logPerf = (label: string, info: Record<string, any>) => {
-  if (!import.meta.env.DEV) return;
-  const ts = new Date().toISOString();
-  // eslint-disable-next-line no-console
-  console.log(`[AUTH_CONTEXT][${ts}] ${label}`, info);
-};
-
-// Timeout helper mejorado para Netlify
-const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
-  let timeoutId: number;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = window.setTimeout(() => {
-      reject(new Error(`Timeout: ${label} after ${ms}ms`));
-    }, ms);
-  });
-  
-  try {
-    const result = await Promise.race([promise, timeoutPromise]);
-    return result as T;
-  } finally {
-    clearTimeout(timeoutId!);
-  }
-};
+const log = (...args: any[]) => { if (import.meta.env.DEV) console.log('[AUTH]', ...args); };
 
 interface AuthContextType {
   session: Session | null;
@@ -49,16 +26,12 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
+  return ctx;
 };
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
+interface AuthProviderProps { children: ReactNode; }
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [session, setSession] = useState<Session | null>(null);
@@ -71,7 +44,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
 
   const user = session?.user || null;
   const isLogged = !!user;
@@ -83,225 +55,139 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
        null)
     : null;
 
-  const retryAuth = () => {
-    logPerf('auth.retry', { reason: authWarning });
-    setAuthWarning(null);
-    setAuthLoading(true);
-    setAuthReload((c) => c + 1);
-  };
+  const retryAuth = () => { setAuthWarning(null); setAuthLoading(true); setAuthReload(c => c + 1); };
 
-  // Función para limpiar localStorage corrupto al inicio
-  const cleanCorruptedLocalStorage = () => {
+  const migrateLegacyStorage = async (): Promise<Session | null> => {
     try {
-      const sbKeys = Object.keys(localStorage).filter(k => k.startsWith("sb-") && k.includes("-auth-token"));
-      
-      for (const key of sbKeys) {
-        try {
-          const raw = localStorage.getItem(key);
-          if (!raw) continue;
-          
-          const parsed = JSON.parse(raw);
-          const s = parsed?.currentSession ?? parsed?.session ?? parsed;
-          
-          // Verificar estructura básica
-          if (!s?.access_token || !s?.refresh_token) {
-            console.warn("[AUTH_CONTEXT] Removing corrupted localStorage entry:", key);
-            localStorage.removeItem(key);
-            continue;
-          }
-          
-          // Verificar expiración
-          if (s.expires_at && s.expires_at * 1000 < Date.now()) {
-            console.warn("[AUTH_CONTEXT] Removing expired localStorage entry:", key);
-            localStorage.removeItem(key);
-          }
-        } catch (e) {
-          console.warn("[AUTH_CONTEXT] Removing unparseable localStorage entry:", key);
-          localStorage.removeItem(key);
-        }
-      }
-    } catch (e) {
-      console.warn("[AUTH_CONTEXT] Error cleaning localStorage:", e);
-    }
-  };
-
-  async function tryRecoverSupabaseSessionFromStorage(): Promise<Session | null> {
-    try {
-      const sbKey = Object.keys(localStorage)
-        .find(k => k.startsWith("sb-") && k.includes("-auth-token"));
-      if (!sbKey) return null;
-
-      const raw = localStorage.getItem(sbKey);
+      const raw = localStorage.getItem('obrador-auth');
       if (!raw) return null;
-
       const parsed = JSON.parse(raw);
       const s = parsed?.currentSession ?? parsed?.session ?? parsed;
-
       const access_token: string | undefined = s?.access_token;
       const refresh_token: string | undefined = s?.refresh_token;
       const expires_at: number | undefined = s?.expires_at;
 
       if (!access_token || !refresh_token) {
-        console.warn("[AUTH_CONTEXT] Invalid session in localStorage - missing tokens");
-        localStorage.removeItem(sbKey);
+        localStorage.removeItem('obrador-auth');
         return null;
       }
-
-      // Verificar si el token está expirado
       if (expires_at && expires_at * 1000 < Date.now()) {
-        console.warn("[AUTH_CONTEXT] Session in localStorage is expired");
-        localStorage.removeItem(sbKey);
+        localStorage.removeItem('obrador-auth');
         return null;
       }
 
-      console.log("[AUTH_CONTEXT] Attempting to restore session from localStorage");
+      // Migrar a la clave por defecto del SDK
       const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
-      
       if (error) {
-        console.warn("[AUTH_CONTEXT] setSession from storage failed:", error.message);
-        localStorage.removeItem(sbKey);
+        localStorage.removeItem('obrador-auth');
         return null;
       }
-      
-      console.log("[AUTH_CONTEXT] Successfully restored session from localStorage");
+      // Limpia la antigua para evitar divergencias
+      localStorage.removeItem('obrador-auth');
       return data.session ?? null;
-    } catch (e) {
-      console.warn("[AUTH_CONTEXT] tryRecoverSupabaseSessionFromStorage error:", e);
-      const sbKeys = Object.keys(localStorage).filter(k => k.startsWith("sb-") && k.includes("-auth-token"));
-      sbKeys.forEach(k => localStorage.removeItem(k));
+    } catch {
+      localStorage.removeItem('obrador-auth');
       return null;
     }
-  }
+  };
 
-  // Monitorizar conectividad
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+  type ProfileRow = { id: string; role: UserRole; nombre: string };
 
-  // Autenticación principal
-  useEffect(() => {
-    let mounted = true;
-    const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || "admin@obradorencinas.com").toLowerCase();
+  const upsertProfileIfNeeded = async (u: SupaUser) => {
+    // 1) Intentar leer
+    const selRes = await supabase
+      .from("profiles")
+      .select("id,role,nombre")
+      .eq("user_id", u.id)
+      .maybeSingle();
 
-    type ProfileRow = { id: string; role: UserRole; nombre: string };
+    const data = (selRes as any)?.data as ProfileRow | null;
+    const err = (selRes as any)?.error as { message?: string } | null;
 
-    const upsertProfileIfNeeded = async (u: SupaUser) => {
-      const t0 = performance.now();
-      const selRes = await supabase
-        .from("profiles")
-        .select("id,role,nombre")
-        .eq("user_id", u.id)
-        .maybeSingle();
-      const data = (selRes as any)?.data as ProfileRow | null;
-      const error = (selRes as any)?.error as { message?: string } | null;
-      const t1 = performance.now();
-      logPerf("profiles.select maybeSingle", {
-        duration_ms: +(t1 - t0).toFixed(1),
-        user_id: u.id,
-        hadError: !!error,
-        found: !!data
-      });
+    if (err) {
+      // No bloquear UX: dejar nombre de usuario básico y role null
+      setProfileRole(null);
+      setProfileName(u.user_metadata?.nombre || u.user_metadata?.name || (u.email?.split("@")[0] ?? 'Usuario'));
+      return;
+    }
 
-      if (!mounted) return;
-
-      if (error) {
-        logPerf("profiles.select error", { message: error.message });
-        setProfileRole(null);
-        setProfileName(null);
-        return;
-      }
-
-      if (!data) {
-        const inferredRole: UserRole =
-          u.email && u.email.toLowerCase() === ADMIN_EMAIL ? "admin" : "customer";
-
-        const t2 = performance.now();
-        const insRes = await supabase
-          .from("profiles")
-          .insert({
-            user_id: u.id,
-            nombre:
-              u.user_metadata?.nombre ||
-              u.user_metadata?.name ||
-              (u.email?.split("@")[0] ?? "Usuario"),
-            role: inferredRole
-          })
-          .select("role,nombre")
-          .single();
-        const inserted = (insRes as any)?.data as { role: UserRole; nombre: string } | null;
-        const insertErr = (insRes as any)?.error as { message?: string } | null;
-        const t3 = performance.now();
-        logPerf("profiles.insert single", {
-          duration_ms: +(t3 - t2).toFixed(1),
-          user_id: u.id,
-          hadError: !!insertErr,
-          assignedRole: inferredRole
-        });
-
-        if (!mounted) return;
-        if (insertErr || !inserted) {
-          if (insertErr) logPerf("profiles.insert error", { message: insertErr.message });
-          setProfileRole(null);
-          setProfileName(null);
-          return;
-        }
-        setProfileRole(inserted.role as UserRole);
-        setProfileName(inserted.nombre);
-        return;
-      }
-
+    if (data) {
       setProfileRole((data.role as UserRole) || null);
       setProfileName(data.nombre || null);
-    };
+      return;
+    }
+
+    // 2) No existe → inferir y crear mínimo
+    const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || "admin@obradorencinas.com").toLowerCase();
+    const inferredRole: UserRole = (u.email && u.email.toLowerCase() === ADMIN_EMAIL) ? "admin" : "customer";
+
+    const insRes = await supabase
+      .from("profiles")
+      .insert({
+        user_id: u.id,
+        nombre: u.user_metadata?.nombre || u.user_metadata?.name || (u.email?.split("@")[0] ?? "Usuario"),
+        role: inferredRole
+      })
+      .select("role,nombre")
+      .single();
+
+    const inserted = (insRes as any)?.data as { role: UserRole; nombre: string } | null;
+    if (inserted) {
+      setProfileRole(inserted.role);
+      setProfileName(inserted.nombre);
+    } else {
+      // No bloquear si insert falla
+      setProfileRole(null);
+      setProfileName(u.user_metadata?.nombre || u.user_metadata?.name || (u.email?.split("@")[0] ?? "Usuario"));
+    }
+  };
+
+  useEffect(() => {
+    let mounted = true;
 
     const init = async () => {
       setAuthLoading(true);
       setAuthWarning(null);
-      
-      cleanCorruptedLocalStorage();
-      
-      // Intenta obtener la sesión del cliente Supabase.
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      logPerf("auth.init getSession", { hasSession: !!currentSession });
 
-      // Si no hay sesión activa en el cliente, intenta recuperarla desde localStorage.
-      if (!currentSession) {
-        logPerf("auth.init", { message: "No active session, attempting recovery from storage." });
-        // tryRecover... llama a setSession, lo que disparará onAuthStateChange si tiene éxito.
-        await tryRecoverSupabaseSessionFromStorage();
+      // 1) Sesión actual (SDK lee la clave por defecto sb-*)
+      const { data: { session: s0 } } = await supabase.auth.getSession();
+      let s = s0;
+
+      // 2) Migrar desde 'obrador-auth' si no hay sesión
+      if (!s) {
+        s = await migrateLegacyStorage();
       }
-      
-      // Si después de todo no hay sesión, onAuthStateChange se disparará con
-      // un evento INITIAL_SESSION y newSession=null, lo que pondrá authLoading a false.
+
+      if (!mounted) return;
+
+      if (s) {
+        setSession(s);
+        setEmailVerified(!!s.user.email_confirmed_at);
+        await upsertProfileIfNeeded(s.user);
+        if (!mounted) return;
+        setAuthLoading(false);
+      } else {
+        setSession(null);
+        setProfileRole(null);
+        setProfileName(null);
+        setEmailVerified(null);
+        setAuthLoading(false);
+      }
     };
 
     init();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (evt, newSession) => {
-      logPerf("auth.onAuthStateChange", { event: evt, hasSession: !!newSession });
+    const { data: sub } = supabase.auth.onAuthStateChange(async (evt, newSession) => {
       if (!mounted) return;
+      log('state', evt, { hasSession: !!newSession });
 
-      // Una sesión es válida si tenemos un newSession.
-      // Los eventos relevantes son INITIAL_SESSION (carga inicial), SIGNED_IN, y TOKEN_REFRESHED.
       if (newSession) {
         setSession(newSession);
         setEmailVerified(!!newSession.user.email_confirmed_at);
-        // Solo buscamos perfil si hay un usuario en la sesión.
-        if (newSession.user) {
-          await upsertProfileIfNeeded(newSession.user);
-        }
-        // Una vez que tenemos sesión y perfil, la carga ha terminado.
+        await upsertProfileIfNeeded(newSession.user);
+        if (!mounted) return;
         setAuthLoading(false);
-      } else if (evt === 'SIGNED_OUT' || (evt === 'INITIAL_SESSION' && !newSession)) {
-        // Si el evento es SIGNED_OUT, o si en la carga inicial no hay sesión,
-        // limpiamos todo y terminamos la carga.
+      } else {
         setSession(null);
         setProfileRole(null);
         setProfileName(null);
@@ -312,34 +198,28 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     return () => {
       mounted = false;
-      listener.subscription.unsubscribe();
+      sub.subscription.unsubscribe();
     };
-  }, [authReload, isOnline]);
+  }, [authReload]);
 
   const signOut = async () => {
     if (isSigningOut) return;
     setIsSigningOut(true);
-    logPerf("auth.signOut", { scope: "global" });
     try {
-      const { error } = await supabase.auth.signOut({ scope: "global" });
-      if (error) throw error;
-
-      // Limpiar estado local inmediatamente
+      await supabase.auth.signOut({ scope: 'global' });
+    } finally {
+      // Limpiar ambos tipos de claves por si quedan restos
+      try {
+        Object.keys(localStorage).forEach(k => {
+          if (k === 'obrador-auth' || (k.startsWith('sb-') && k.includes('-auth-token'))) {
+            localStorage.removeItem(k);
+          }
+        });
+      } catch {}
       setSession(null);
       setProfileRole(null);
       setProfileName(null);
       setEmailVerified(null);
-      
-      // Limpiar cualquier residuo de sesión en localStorage
-      Object.keys(localStorage)
-        .filter(k => k.startsWith("sb-") && k.includes("-auth-token"))
-        .forEach(k => localStorage.removeItem(k));
-
-    } catch (e: any) {
-      logPerf("auth.signOut exception", { message: e.message });
-      // Re-throw para que el UI pueda manejarlo
-      throw e;
-    } finally {
       setIsSigningOut(false);
     }
   };
@@ -352,15 +232,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const { error } = await supabase.auth.resend({
         type: 'signup',
         email: user.email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth-confirm`
-        }
+        options: { emailRedirectTo: `${window.location.origin}/auth-confirm` }
       });
       if (error) throw error;
       setResent(true);
-    } catch (e: any) {
-      // Re-throw para que el UI pueda manejarlo
-      throw e;
     } finally {
       setResending(false);
     }
@@ -376,7 +251,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     authWarning,
     isLogged,
     displayName,
-    retryAuth,
+    retryAuth: () => setAuthReload(c => c + 1),
     signOut,
     resendVerification,
     resending,
@@ -384,9 +259,5 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     isSigningOut
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

@@ -10,8 +10,7 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJh
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
-    storageKey: 'obrador-auth',
+    // Usar la clave por defecto sb-... para evitar duplicidades con 'obrador-auth'
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,

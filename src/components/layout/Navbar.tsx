@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { Menu, User as UserIcon, Clock, LogOut, AlertCircle, Wheat, Crown, ChevronRight, Bug } from "lucide-react"
+import { Menu, User as UserIcon, Clock, LogOut, AlertCircle, Wheat, Crown, ChevronRight } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
 import { useLocation } from "react-router-dom"
@@ -307,19 +307,6 @@ const Navbar = () => {
                   </a>
                 </Button>
               )}
-              
-              {/* Debug Link - Always visible for testing */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 hover:bg-yellow-500/10 hover:text-yellow-600 transition-all duration-300"
-                title="Debug Tools"
-                asChild
-              >
-                <a href="/debug">
-                  <Bug className="w-4 h-4" />
-                </a>
-              </Button>
             </div>
 
             {/* Mobile menu */}
@@ -415,19 +402,6 @@ const Navbar = () => {
                           <LogOut className="w-4 h-4 mr-2" />
                           {isSigningOut ? "Cerrando sesión..." : "Cerrar sesión"}
                         </Button>
-                        
-                        {/* Debug Link - Mobile */}
-                        <Button
-                          variant="ghost"
-                          className="w-full h-10 text-yellow-600 hover:bg-yellow-50 font-medium transition-all duration-300 mt-2"
-                          asChild
-                          onClick={() => setIsOpen(false)}
-                        >
-                          <a href="/debug">
-                            <Bug className="w-4 h-4 mr-2" />
-                            Debug Tools
-                          </a>
-                        </Button>
                       </div>
                     ) : (
                       <>
@@ -439,19 +413,6 @@ const Navbar = () => {
                           <a href="/login">
                             <UserIcon className="w-4 h-4 mr-2" />
                             Acceder al Obrador
-                          </a>
-                        </Button>
-                        
-                        {/* Debug Link - Mobile (Not logged in) */}
-                        <Button
-                          variant="ghost"
-                          className="w-full h-10 text-yellow-600 hover:bg-yellow-50 font-medium transition-all duration-300 mt-2"
-                          asChild
-                          onClick={() => setIsOpen(false)}
-                        >
-                          <a href="/debug">
-                            <Bug className="w-4 h-4 mr-2" />
-                            Debug Tools
                           </a>
                         </Button>
                       </>
