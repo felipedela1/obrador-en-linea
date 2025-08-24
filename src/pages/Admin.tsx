@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { HeroButton } from "@/components/ui/hero-button";
 import { useToast } from "@/components/ui/use-toast";
 import { Upload, Plus, RefreshCw, ImageIcon, Check, Loader2, AlertCircle, Sparkles, Search, Package } from "lucide-react"; // removed unused icons
+import { useProfileGate } from "@/hooks/useProfileGate";
 
 // Simple perf log (dev only)
 const logPerf = (label: string, info: Record<string, any>) => {
@@ -64,6 +65,48 @@ const emptyProduct: Partial<ProductRow> = {
 
 const Admin = () => {
   const { toast } = useToast();
+  const { loading: gateLoading, allowed, error: gateError, retry, profile } = useProfileGate();
+
+  // Solo permitir acceso a admins
+  if (gateLoading) {
+    return (
+      <div className="min-h-screen flex flex-col relative overflow-x-hidden">
+        <Navbar />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600" />
+            <p className="text-slate-600">Verificando permisos...</p>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!allowed || profile?.role !== "admin") {
+    return (
+      <div className="min-h-screen flex flex-col relative overflow-x-hidden">
+        <Navbar />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4 max-w-md mx-auto px-6">
+            <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+            <h2 className="text-xl font-semibold text-slate-800">Acceso Restringido</h2>
+            <p className="text-slate-600">
+              {gateError || "No tienes permisos de administrador"}
+            </p>
+            {gateError && (
+              <Button onClick={retry} variant="outline" className="mt-4">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Reintentar
+              </Button>
+            )}
+          </div>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [edit, setEdit] = useState<EditState>({ mode: "create", product: emptyProduct, open: false });

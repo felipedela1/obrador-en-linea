@@ -16,8 +16,25 @@ const logPerf = (label: string, info: Record<string, any>) => {
   console.log(`[PERF][${ts}] ${label}`, info)
 }
 
+// Timeout helper mejorado para Netlify
+const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+  let timeoutId: number;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(`Timeout: ${label} after ${ms}ms`));
+    }, ms);
+  });
+  
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    return result as T;
+  } finally {
+    clearTimeout(timeoutId!);
+  }
+}
+
 // Timeout guard to avoid infinite spinners on network stalls
-const withTimeout = async <T,>(promise: Promise<T>, ms = 7000, label = "operation"): Promise<T> => {
+const withTimeoutOld = async <T,>(promise: Promise<T>, ms = 7000, label = "operation"): Promise<T> => {
   let timeoutId: number | undefined
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = window.setTimeout(() => reject(new Error(`Timeout ${label} after ${ms}ms`)), ms)
@@ -210,7 +227,7 @@ const Navbar = () => {
       try {
         const { data: { session } } = await withTimeout(
           supabase.auth.getSession(),
-          6000,
+          8000, // Aumentado a 8 segundos para Netlify
           'auth.getSession'
         )
         const t1 = performance.now()

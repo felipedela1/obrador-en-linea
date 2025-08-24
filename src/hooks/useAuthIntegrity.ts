@@ -7,6 +7,7 @@ const clearLocalSupabaseAuth = () => {
     Object.keys(localStorage)
       .filter((k) => k.startsWith("sb-") && k.includes("-auth-token"))
       .forEach((k) => localStorage.removeItem(k));
+    localStorage.removeItem("obrador-auth");
   } catch (e) {
     // noop
   }
@@ -34,13 +35,17 @@ export function useAuthIntegrity() {
     if (checking.current) return;
     const now = Date.now();
     // Evita rafagas de validaciones excesivas
-    if (now - lastCheck.current < 1500) return;
+    if (now - lastCheck.current < 3000) return; // Aumentado de 1500 a 3000ms
     checking.current = true;
 
     try {
       const { data, error } = await supabase.auth.getSession();
       if (error) {
-        // Error al recuperar sesión: forzar limpieza y redirect
+        console.warn("[AUTH] getSession error:", error.message);
+        // Solo forzar limpieza en errores graves, no en timeouts
+        if (error.message?.includes('timeout') || error.message?.includes('network')) {
+          return; // No hacer nada en errores de red
+        }
         await hardSignOutAndReset();
         return;
       }
@@ -48,11 +53,13 @@ export function useAuthIntegrity() {
       const session = data.session;
       const hasLocalToken = Object.keys(localStorage).some(
         (k) => k.startsWith("sb-") && k.includes("-auth-token")
-      );
+      ) || localStorage.getItem("obrador-auth");
 
       // Si no hay sesión válida pero hay restos locales => limpiar
       if (!session && hasLocalToken) {
-        await hardSignOutAndReset();
+        console.log("[AUTH] Cleaning orphaned tokens");
+        clearLocalSupabaseAuth();
+        // No forzar redirect automáticamente, dejar que el usuario navegue
         return;
       }
     } finally {
