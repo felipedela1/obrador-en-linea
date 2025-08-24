@@ -2,36 +2,74 @@ import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Menu, User as UserIcon, Clock, LogOut, AlertCircle, Wheat, Crown, ChevronRight, Bug } from "lucide-react"
-import { useAuth } from "@/contexts/AuthContext"
+import { supabase } from "@/integrations/supabase/client"
+import type { UserRole } from "@/types/models"
 import { useToast } from "@/components/ui/use-toast"
+import type { Session, User as SupaUser } from "@supabase/supabase-js"
 import { useLocation } from "react-router-dom"
 
+// Lightweight perf logging helper (only logs in dev)
+const logPerf = (label: string, info: Record<string, any>) => {
+  if (!import.meta.env.DEV) return
+  const ts = new Date().toISOString()
+  // eslint-disable-next-line no-console
+  console.log(`[PERF][${ts}] ${label}`, info)
+}
+
+// Timeout helper mejorado para Netlify
+const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+  let timeoutId: number;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(`Timeout: ${label} after ${ms}ms`));
+    }, ms);
+  });
+  
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    return result as T;
+  } finally {
+    clearTimeout(timeoutId!);
+  }
+}
+
+// Timeout guard to avoid infinite spinners on network stalls
+const withTimeoutOld = async <T,>(promise: Promise<T>, ms = 7000, label = "operation"): Promise<T> => {
+  let timeoutId: number | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(`Timeout ${label} after ${ms}ms`)), ms)
+  })
+  try {
+    const result = (await Promise.race([promise, timeout])) as T
+    return result
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
 const Navbar = () => {
+  const [session, setSession] = useState<Session | null>(null)
+  const [profileRole, setProfileRole] = useState<UserRole | null>(null)
+  const [profileName, setProfileName] = useState<string | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [isSigningOut, setIsSigningOut] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
   const { toast } = useToast()
+  const [emailVerified, setEmailVerified] = useState<boolean | null>(null)
+  const [resending, setResending] = useState(false)
+  const [resent, setResent] = useState(false)
   const location = useLocation()
   const isRecoveryRoute = location.pathname === "/update-password"
-  
-  // Usar el contexto de autenticación en lugar de estado local
-  const {
-    session,
-    user,
-    profileRole,
-    profileName,
-    emailVerified,
-    authLoading,
-    authWarning,
-    isLogged: contextIsLogged,
-    displayName,
-    retryAuth,
-    signOut,
-    resendVerification,
-    resending,
-    resent,
-    isSigningOut
-  } = useAuth()
-
-  const isLogged = contextIsLogged && !isRecoveryRoute
+  const user = session?.user || null
+  const isLogged = !!user && !isRecoveryRoute
+  const displayName =
+    isLogged
+      ? (profileName ||
+         user.user_metadata?.nombre ||
+         user.user_metadata?.name ||
+         user.email ||
+         null)
+      : null
 
   // Estado para detectar scroll y la posición
   const [scrolled, setScrolled] = useState(false)
@@ -41,447 +79,719 @@ const Navbar = () => {
   // Nuevo estado para detectar si necesitamos fondo oscuro
   const [needsDarkBg, setNeedsDarkBg] = useState(false)
 
-  // Manejador de signOut usando el contexto
-  const handleSignOut = async () => {
-    try {
-      await signOut()
-      toast({
-        title: "Sesión cerrada",
-        description: "Has cerrado sesión correctamente",
-      })
-    } catch (error) {
-      console.error("[NAVBAR] Sign out error:", error)
-      toast({
-        title: "Error",
-        description: "Error al cerrar sesión",
-        variant: "destructive",
-      })
-    }
+  // Nuevo: advertencia de auth/red y recarga manual
+  const [authWarning, setAuthWarning] = useState<string | null>(null)
+  const [authReload, setAuthReload] = useState(0)
+  const retryAuth = () => {
+    logPerf("auth.retry", { reason: authWarning })
+    setAuthWarning(null)
+    setAuthLoading(true)
+    setAuthReload((c) => c + 1)
   }
 
-  // Manejador de reenvío de verificación usando el contexto
-  const handleResendVerification = async () => {
+  // Nuevo: estado de conectividad
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true)
+  
+  async function tryRecoverSupabaseSessionFromStorage(): Promise<Session | null> {
     try {
-      await resendVerification()
-      toast({
-        title: "Email reenviado",
-        description: "Se ha reenviado el email de verificación",
-      })
-    } catch (error) {
-      console.error("[NAVBAR] Resend verification error:", error)
-      toast({
-        title: "Error",
-        description: "Error al reenviar el email de verificación",
-        variant: "destructive",
-      })
-    }
-  }
+      const sbKey = Object.keys(localStorage)
+        .find(k => k.startsWith("sb-") && k.includes("-auth-token"));
+      if (!sbKey) return null;
 
-  // Detectar scroll para efectos de navbar
-  useEffect(() => {
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY
-      const direction = currentScrollY > lastScrollY.current ? 'down' : 'up'
+      const raw = localStorage.getItem(sbKey);
+      if (!raw) return null;
+
+      const parsed = JSON.parse(raw);
+
+      // Supabase puede guardar distintas formas entre versiones:
+      // v2: { currentSession: { access_token, refresh_token, user, ... } }
+      // v1: { session: { ... } }
+      // directo: { access_token, refresh_token, user, ... }
+      const s = parsed?.currentSession ?? parsed?.session ?? parsed;
+
+      const access_token: string | undefined = s?.access_token;
+      const refresh_token: string | undefined = s?.refresh_token;
+      const expires_at: number | undefined = s?.expires_at;
+
+      if (!access_token || !refresh_token) {
+        console.warn("[AUTH] Invalid session in localStorage - missing tokens");
+        localStorage.removeItem(sbKey);
+        return null;
+      }
+
+      // Verificar si el token está expirado
+      if (expires_at && expires_at * 1000 < Date.now()) {
+        console.warn("[AUTH] Session in localStorage is expired");
+        localStorage.removeItem(sbKey);
+        return null;
+      }
+
+      // ⚠️ IMPORTANTE: Solo intentar setSession si los datos parecen válidos
+      // y NO están expirados
+      console.log("[AUTH] Attempting to restore session from localStorage");
+      const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
       
-      setScrollDirection(direction)
-      setScrolled(currentScrollY > 50)
-      lastScrollY.current = currentScrollY
+      if (error) {
+        console.warn("[AUTH] setSession from storage failed:", error.message);
+        // Si falla, limpiar el localStorage corrupto
+        localStorage.removeItem(sbKey);
+        return null;
+      }
+      
+      console.log("[AUTH] Successfully restored session from localStorage");
+      return data.session ?? null;
+    } catch (e) {
+      console.warn("[AUTH] tryRecoverSupabaseSessionFromStorage error:", e);
+      // En caso de error, limpiar cualquier dato corrupto
+      const sbKeys = Object.keys(localStorage).filter(k => k.startsWith("sb-") && k.includes("-auth-token"));
+      sbKeys.forEach(k => localStorage.removeItem(k));
+      return null;
     }
+  }
 
-    window.addEventListener("scroll", handleScroll, { passive: true })
-    return () => window.removeEventListener("scroll", handleScroll)
-  }, [])
+  // Función para limpiar localStorage corrupto al inicio
+  const cleanCorruptedLocalStorage = () => {
+    try {
+      const sbKeys = Object.keys(localStorage).filter(k => k.startsWith("sb-") && k.includes("-auth-token"));
+      
+      for (const key of sbKeys) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (!raw) continue;
+          
+          const parsed = JSON.parse(raw);
+          const s = parsed?.currentSession ?? parsed?.session ?? parsed;
+          
+          // Verificar estructura básica
+          if (!s?.access_token || !s?.refresh_token) {
+            console.warn("[AUTH] Removing corrupted localStorage entry:", key);
+            localStorage.removeItem(key);
+            continue;
+          }
+          
+          // Verificar expiración
+          if (s.expires_at && s.expires_at * 1000 < Date.now()) {
+            console.warn("[AUTH] Removing expired localStorage entry:", key);
+            localStorage.removeItem(key);
+          }
+        } catch (e) {
+          console.warn("[AUTH] Removing unparseable localStorage entry:", key);
+          localStorage.removeItem(key);
+        }
+      }
+    } catch (e) {
+      console.warn("[AUTH] Error cleaning localStorage:", e);
+    }
+  };
 
-  // Detectar si necesitamos fondo oscuro basado en la ruta
+  // Detectar rutas que necesitan fondo oscuro
   useEffect(() => {
-    const darkRoutes = ["/", "/productos", "/chef", "/location"]
-    setNeedsDarkBg(darkRoutes.includes(location.pathname))
+    const darkBackgroundRoutes = ["/", "/inicio", "/home"]
+    setNeedsDarkBg(darkBackgroundRoutes.includes(location.pathname))
   }, [location.pathname])
 
-  const navbarClasses = `
-    fixed top-0 left-0 right-0 z-50 transition-all duration-300
-    ${scrolled 
-      ? "bg-white/95 backdrop-blur-md shadow-lg border-b border-gray-200" 
-      : needsDarkBg 
-        ? "bg-transparent" 
-        : "bg-white/90 backdrop-blur-sm"
+  // Monitorizar conectividad para dar feedback rápido
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
     }
-    ${scrollDirection === 'down' && scrolled ? "transform -translate-y-2" : "transform translate-y-0"}
-  `.trim()
+  }, [])
 
-  const linkClasses = (isActive: boolean) => `
-    px-4 py-2 rounded-lg font-medium transition-all duration-300 relative
-    ${isActive 
-      ? "text-blue-600 bg-blue-50" 
-      : scrolled || !needsDarkBg
-        ? "text-gray-700 hover:text-blue-600 hover:bg-blue-50" 
-        : "text-white hover:text-blue-200 hover:bg-white/10"
+  // Mejorar el comportamiento de scroll para mayor fluidez
+  useEffect(() => {
+    // Añadir comportamiento de scroll suave al documento
+    document.documentElement.style.scrollBehavior = 'smooth';
+    
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY
+      
+      // Determinar si hemos scrolleado suficiente para cambiar la apariencia
+      if (currentScrollY > 20) {
+        setScrolled(true)
+        
+        // Determinar dirección de scroll para animaciones
+        if (currentScrollY > lastScrollY.current) {
+          setScrollDirection('down')
+        } else {
+          setScrollDirection('up')
+        }
+      } else {
+        setScrolled(false)
+        setScrollDirection(null)
+      }
+      
+      lastScrollY.current = currentScrollY
     }
-  `.trim()
+    
+    // Usar passive true para mejor rendimiento
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      document.documentElement.style.scrollBehavior = '';
+    }
+  }, [])
 
-  const buttonClasses = `
-    font-medium transition-all duration-300 shadow-lg hover:shadow-xl
-    ${scrolled || !needsDarkBg
-      ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white" 
-      : "bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border border-white/30"
+  useEffect(() => {
+    let mounted = true
+    const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || "admin@obradorencinas.com").toLowerCase()
+
+    type ProfileRow = { id: string; role: UserRole; nombre: string }
+
+    const upsertProfileIfNeeded = async (u: SupaUser) => {
+      const t0 = performance.now()
+      const selRes = await supabase
+        .from("profiles")
+        .select("id,role,nombre")
+        .eq("user_id", u.id)
+        .maybeSingle()
+      const data = (selRes as any)?.data as ProfileRow | null
+      const error = (selRes as any)?.error as { message?: string } | null
+      const t1 = performance.now()
+      logPerf("profiles.select maybeSingle", {
+        duration_ms: +(t1 - t0).toFixed(1),
+        user_id: u.id,
+        hadError: !!error,
+        found: !!data
+      })
+
+      if (!mounted) return
+
+      if (error) {
+        logPerf("profiles.select error", { message: error.message })
+        setProfileRole(null)
+        setProfileName(null)
+        return
+      }
+
+      if (!data) {
+        const inferredRole: UserRole =
+          u.email && u.email.toLowerCase() === ADMIN_EMAIL ? "admin" : "customer"
+
+        const t2 = performance.now()
+        const insRes = await supabase
+          .from("profiles")
+          .insert({
+            user_id: u.id,
+            nombre:
+              u.user_metadata?.nombre ||
+              u.user_metadata?.name ||
+              (u.email?.split("@")[0] ?? "Usuario"),
+            role: inferredRole
+          })
+          .select("role,nombre")
+          .single()
+        const inserted = (insRes as any)?.data as { role: UserRole; nombre: string } | null
+        const insertErr = (insRes as any)?.error as { message?: string } | null
+        const t3 = performance.now()
+        logPerf("profiles.insert single", {
+          duration_ms: +(t3 - t2).toFixed(1),
+          user_id: u.id,
+          hadError: !!insertErr,
+          assignedRole: inferredRole
+        })
+
+        if (!mounted) return
+        if (insertErr || !inserted) {
+          if (insertErr) logPerf("profiles.insert error", { message: insertErr.message })
+          setProfileRole(null)
+          setProfileName(null)
+          return
+        }
+        setProfileRole(inserted.role as UserRole)
+        setProfileName(inserted.nombre)
+        return
+      }
+
+      setProfileRole((data.role as UserRole) || null)
+      setProfileName(data.nombre || null)
     }
-  `.trim()
+
+    const init = async () => {
+      setAuthLoading(true)
+      setAuthWarning(null)
+      
+      // Limpiar localStorage corrupto antes de intentar cualquier autenticación
+      cleanCorruptedLocalStorage();
+      
+      let session = null;
+      try {
+        const { data: { session: sess } } = await withTimeout(
+          supabase.auth.getSession(),
+          8000,
+          "auth.getSession"
+        );
+        session = sess;
+        logPerf("auth.getSession", { hasSession: !!session });
+      } catch (err: any) {
+        logPerf("auth.getSession failure", { message: err?.message });
+
+        // ✅ Intento 1: recuperar correctamente “inyectando” en el cliente
+        session = await tryRecoverSupabaseSessionFromStorage();
+
+        // (Opcional) Intento 2: si sigue sin sesión pero hay red, prueba un refresh “forzado”
+        if (!session && navigator.onLine) {
+          try {
+            const { data, error } = await supabase.auth.refreshSession();
+            if (!error) session = data.session ?? null;
+          } catch {}
+        }
+
+        if (!session) {
+          const msg = !isOnline
+            ? "Sin conexión. Revisa tu red."
+            : (err?.message || "No se pudo conectar con autenticación");
+          setAuthWarning(`${msg}. Reintentar`);
+        }
+      }
+
+
+      if (!mounted) return
+      setSession(session)
+      if (session?.user) {
+        setEmailVerified(!!session.user.email_confirmed_at)
+        await upsertProfileIfNeeded(session.user)
+      } else {
+        setProfileRole(null)
+        setProfileName(null)
+        setEmailVerified(null)
+      }
+      
+      if (mounted) setAuthLoading(false)
+    }
+
+    init()
+
+    const { data: listener } = supabase.auth.onAuthStateChange(async (evt, newSession) => {
+      logPerf("auth.onAuthStateChange", { event: evt, hasSession: !!newSession })
+      if (!mounted) return
+      setSession(newSession)
+      if (newSession?.user) {
+        setEmailVerified(!!newSession.user.email_confirmed_at)
+        await upsertProfileIfNeeded(newSession.user)
+      } else {
+        setProfileRole(null)
+        setProfileName(null)
+        setEmailVerified(null)
+      }
+    })
+
+    return () => {
+      mounted = false
+      listener.subscription.unsubscribe()
+    }
+  }, [authReload, isOnline])
+
+  const handleSignOut = async () => {
+    if (isSigningOut) return
+    setIsSigningOut(true)
+    const t0 = performance.now()
+    try {
+      const { error } = await supabase.auth.signOut({ scope: "global" }) // revoca todos los refresh tokens
+      const t1 = performance.now()
+      logPerf("auth.signOut", { duration_ms: +(t1 - t0).toFixed(1), hadError: !!error })
+      if (error) throw error
+
+      Object.keys(localStorage)
+        .filter(k => k.startsWith("sb-") && k.includes("-auth-token"))
+        .forEach(k => localStorage.removeItem(k))
+
+      setSession(null)
+      setProfileRole(null)
+      setProfileName(null)
+      setEmailVerified(null)
+      toast({ title: "Sesión cerrada" })
+      window.location.replace("/")
+    } catch (e: any) {
+      logPerf("auth.signOut exception", { message: e.message })
+      toast({
+        title: "Error al cerrar sesión",
+        description: e.message || "Inténtalo de nuevo",
+        variant: "destructive"
+      })
+    } finally {
+      setIsSigningOut(false)
+    }
+  }
+
+  const resendVerification = async () => {
+    if (!user?.email || resending || emailVerified) return
+    setResending(true)
+    setResent(false)
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: user.email,
+        options: { emailRedirectTo: window.location.origin + "/auth-confirm" }
+      })
+      if (error) throw error
+      setResent(true)
+      toast({ title: "Correo reenviado" })
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "No se pudo reenviar", variant: "destructive" })
+    } finally {
+      setResending(false)
+    }
+  }
+
+  const navLinks = [
+    { label: "Inicio", href: "/" },
+    { label: "Productos", href: "/productos" },
+    ...(isLogged && (profileRole === "customer" || profileRole === "admin") ? [
+      { label: "Reservas", href: "/reservas" },
+      { label: "Mis reservas", href: "/misreservas" }
+    ] : []),
+    ...(profileRole === "admin" ? [{ label: "Admin", href: "/admin" }] : [])
+  ]
+
+  const NavLinks = ({ mobile = false, onClose = () => {} }: { mobile?: boolean; onClose?: () => void }) => {
+    // Mostrar spinner SOLO si hay sesión iniciada y todavía estamos cargando datos de perfil/autenticación
+    if (authLoading && isLogged) {
+      return (
+        <div className={mobile ? "flex flex-col space-y-4" : "hidden md:flex items-center justify-center flex-1"}>
+          {mobile ? (
+            // Para móvil: texto elegante con icono
+            <div className="text-center py-6 flex flex-col items-center space-y-2" aria-live="polite">
+              <div className="w-10 h-10 premium-glass rounded-full flex items-center justify-center">
+                <Wheat className="w-5 h-5 text-blue-600 animate-pulse" />
+              </div>
+              <span className="text-sm text-slate-600 font-medium">Preparando menú artesanal...</span>
+            </div>
+          ) : (
+            // Para desktop: barra de carga premium con gradiente
+            <div className="relative w-56 h-8 premium-glass rounded-full overflow-hidden shadow-soft" aria-live="polite">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-400/50 to-transparent animate-[loading-wave_2.5s_ease-in-out_infinite] w-1/2 h-full" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex items-center space-x-2">
+                  <Wheat className="w-4 h-4 text-blue-600 animate-pulse" />
+                  <span className="text-xs text-slate-700 font-semibold tracking-wide">Cargando Obrador Artesanal</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    // Si no hay sesión (visitante) o ya terminó de cargar, mostramos los enlaces directamente
+    return (
+      <div className={mobile ? "flex flex-col space-y-2" : "hidden md:flex items-center space-x-10"}>
+        {navLinks.map((l, index) => (
+          <a
+            key={l.href}
+            href={l.href}
+            onClick={onClose}
+            className={`group relative transition-all duration-300 ${
+              mobile 
+                ? "premium-glass hover-float py-3 px-4 rounded-xl flex items-center justify-between" 
+                : "font-medium text-slate-800 hover:text-blue-600 text-sm tracking-wide"
+            }`}
+            style={mobile ? {} : { animationDelay: `${index * 0.1}s`, opacity: 0, animation: 'fade-in 0.6s ease forwards' }}
+          >
+            <span>{l.label}</span>
+            
+            {mobile && <ChevronRight className="w-4 h-4 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />}
+            
+            {!mobile && (
+              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 transition-all duration-300 group-hover:w-full rounded-full" />
+            )}
+          </a>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <>
-      <nav className={navbarClasses}>
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <a 
-              href="/" 
-              className={`flex items-center space-x-2 font-bold text-xl transition-colors duration-300 ${
-                scrolled || !needsDarkBg ? "text-gray-900" : "text-white"
-              }`}
+      {/* Este div proporciona un espacio para el navbar fixed */}
+      <div className={`h-20 ${isLogged && emailVerified === false ? 'md:h-32' : ''}`} />
+      
+      {/* Navbar con opacidad moderada ajustada */}
+      <nav 
+        className={`fixed top-0 w-full z-50 transition-all ${
+          scrollDirection === 'down' ? 'transform -translate-y-full' : 'transform translate-y-0'
+        } ${
+          scrolled 
+            ? 'duration-500 backdrop-blur-xl bg-white/80 dark:bg-slate-900/75 shadow-xl border-b border-white/30 dark:border-slate-700/40' 
+            : 'duration-700 backdrop-blur-md bg-white/55 dark:bg-slate-900/55 shadow-md border-b border-white/20 dark:border-slate-700/30'
+        }`}
+      >
+        {/* Overlay de gradiente sutil */}
+        <div className="pointer-events-none absolute inset-0 opacity-60 mix-blend-overlay">
+          <div className="w-full h-full bg-gradient-to-r from-blue-200/30 via-transparent to-indigo-200/30 dark:from-blue-900/20 dark:via-transparent dark:to-indigo-900/20" />
+        </div>
+        <div className="container mx-auto px-6 relative">
+          {/* Banner de verificación mejorado */}
+          {isLogged && emailVerified === false && (
+            <div 
+              className="flex items-center gap-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl px-4 py-3 mt-3 mb-3 text-sm font-medium shadow-xl border border-white/10"
+              style={{
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)'
+              }}
+              aria-live="polite"
             >
-              <Wheat className="h-6 w-6" />
-              <span>Obrador</span>
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 shrink-0 animate-pulse" />
+              </div>
+              <span className="flex-1">Tu cuenta está casi lista. Verifica tu correo para acceder a todas las funciones.</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-8 px-4 bg-white/20 hover:bg-white/30 text-white border-white/30 font-medium transition-all duration-300"
+                onClick={resendVerification}
+                disabled={resending || isSigningOut}
+              >
+                {resending ? "Enviando..." : resent ? "✓ Enviado" : "Reenviar"}
+              </Button>
+            </div>
+          )}
+          
+          <div className="flex items-center justify-between h-20">
+            {/* Logo con efecto premium */}
+            <a href="/" className="flex items-center space-x-4 group">
+              <div className="relative">
+                <div className="w-12 h-12 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-xl hover-float transition-all duration-500">
+                  <Wheat className="text-white w-6 h-6 animate-float-slow" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-r from-amber-500 to-yellow-500 rounded-full flex items-center justify-center animate-pulse-slow">
+                  <Crown className="w-2.5 h-2.5 text-white" />
+                </div>
+              </div>
+              <div className="flex flex-col">
+                <span className="font-bold text-xl leading-none tracking-tight text-slate-800 mb-2">Obrador</span>
+                <span className="shimmer-title text-sm font-semibold leading-none tracking-widest">D'LUI</span>
+              </div>
             </a>
 
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center space-x-2">
-              <a href="/" className={linkClasses(location.pathname === "/")}>
-                Inicio
-              </a>
-              <a href="/productos" className={linkClasses(location.pathname === "/productos")}>
-                Productos
-              </a>
-              <a href="/chef" className={linkClasses(location.pathname === "/chef")}>
-                Chef
-              </a>
-              <a href="/location" className={linkClasses(location.pathname === "/location")}>
-                Ubicación
-              </a>
-              
-              {/* Debug Link - Desktop */}
-              <a href="/debug" className={linkClasses(location.pathname === "/debug")}>
-                <Bug className="w-4 h-4 mr-1" />
-                Debug
-              </a>
+            {/* Desktop navigation */}
+            <div className="hidden md:flex items-center justify-center flex-1">
+              <NavLinks />
             </div>
 
-            {/* Desktop Auth Section */}
-            <div className="hidden md:flex items-center space-x-3">
-              {authLoading ? (
-                <div className={`flex items-center px-4 py-2 ${
-                  scrolled || !needsDarkBg ? "text-gray-600" : "text-white/80"
-                }`}>
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent mr-2"></div>
-                  <span className="text-sm">Cargando...</span>
+            {/* Right side */}
+            <div className="hidden md:flex items-center space-x-6">
+              {/* Horarios con efecto premium */}
+              <div className="flex items-center text-sm text-slate-700 premium-glass px-4 py-2 rounded-full shadow-xl">
+                <Clock className="w-4 h-4 mr-2 text-blue-600" />
+                <span className="font-medium">Abierto hasta 14:00</span>
+              </div>
+
+              {/* Estado de autenticación con control de timeout y reintento */}
+              {isLogged && authLoading ? (
+                <div className="premium-glass relative w-40 h-10 rounded-full overflow-hidden shadow-xl" aria-live="polite">
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-400/50 to-transparent animate-[loading-wave_2.5s_ease-in-out_infinite] w-1/2 h-full" style={{ animationDelay: '0.7s' }} />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="flex items-center space-x-2">
+                      <UserIcon className="w-4 h-4 text-blue-600 animate-pulse" />
+                      <span className="text-xs text-slate-700 font-medium">Verificando sesión...</span>
+                    </div>
+                  </div>
                 </div>
               ) : authWarning ? (
-                <div className="flex items-center space-x-2">
-                  <div className="flex items-center px-3 py-2 rounded-lg bg-yellow-50 border border-yellow-200">
-                    <AlertCircle className="w-4 h-4 text-yellow-600 mr-2" />
-                    <span className="text-sm text-yellow-800">{authWarning}</span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={retryAuth}
-                    className="text-yellow-600 border-yellow-300 hover:bg-yellow-50"
-                  >
+                <div className="flex items-center gap-2 premium-glass px-3 py-2 rounded-full shadow-xl text-xs text-slate-700" role="alert" aria-live="assertive">
+                  <AlertCircle className="w-4 h-4 text-amber-500" />
+                  <span className="max-w-[12rem] truncate">{authWarning}</span>
+                  <Button size="sm" variant="ghost" className="h-7 px-2 text-blue-600 hover:text-blue-700" onClick={retryAuth}>
                     Reintentar
                   </Button>
                 </div>
               ) : isLogged ? (
-                <div className="flex items-center space-x-3">
-                  {emailVerified === false && (
-                    <div className="flex items-center space-x-2 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <Clock className="w-4 h-4 text-yellow-600" />
-                      <span className="text-sm text-yellow-800">Email pendiente</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleResendVerification}
-                        disabled={resending}
-                        className="text-yellow-600 hover:bg-yellow-100 h-6 px-2"
-                      >
-                        {resending ? "Enviando..." : resent ? "Enviado" : "Reenviar"}
-                      </Button>
-                    </div>
-                  )}
-                  
-                  <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
-                    scrolled || !needsDarkBg 
-                      ? "bg-gray-50 border border-gray-200" 
-                      : "bg-white/10 backdrop-blur-sm border border-white/20"
-                  }`}>
+                <div 
+                  className="flex items-center space-x-3"
+                  style={{ opacity: 0, animation: 'fade-in 0.6s ease forwards', animationDelay: '0.4s' }}
+                >
+                  <div className="flex items-center space-x-3 px-4 py-2 rounded-full premium-glass shadow-xl">
                     <div className="flex items-center space-x-2">
-                      <UserIcon className={`w-4 h-4 ${
-                        scrolled || !needsDarkBg ? "text-gray-600" : "text-white"
-                      }`} />
-                      {profileRole === "admin" && (
-                        <Crown className={`w-4 h-4 ${
-                          scrolled || !needsDarkBg ? "text-yellow-600" : "text-yellow-300"
-                        }`} />
-                      )}
-                      <span className={`text-sm font-medium ${
-                        scrolled || !needsDarkBg ? "text-gray-900" : "text-white"
-                      }`}>
+                      <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
+                        <UserIcon className="w-4 h-4 text-white" />
+                      </div>
+                      <span className="text-sm font-medium text-slate-800 max-w-32 truncate">
                         {displayName}
                       </span>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleSignOut}
+                      className="h-8 w-8 hover:bg-red-500/10 hover:text-red-500 transition-all duration-300"
+                      title="Cerrar sesión"
+                      disabled={isSigningOut}
+                      aria-busy={isSigningOut}
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </Button>
                   </div>
-
-                  {/* Enlaces de usuario logueado */}
-                  <a href="/reservas" className={linkClasses(location.pathname === "/reservas")}>
-                    Reservas
-                  </a>
-                  <a href="/mis-reservas" className={linkClasses(location.pathname === "/mis-reservas")}>
-                    Mis Reservas
-                  </a>
-                  {profileRole === "admin" && (
-                    <a href="/admin" className={linkClasses(location.pathname === "/admin")}>
-                      <Crown className="w-4 h-4 mr-1" />
-                      Admin
-                    </a>
-                  )}
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleSignOut}
-                    disabled={isSigningOut}
-                    className={`${
-                      scrolled || !needsDarkBg
-                        ? "text-red-600 border-red-200 hover:bg-red-50"
-                        : "text-white border-white/30 hover:bg-white/10"
-                    }`}
-                  >
-                    <LogOut className="w-4 h-4 mr-1" />
-                    {isSigningOut ? "Saliendo..." : "Salir"}
-                  </Button>
                 </div>
               ) : (
-                <Button className={buttonClasses} asChild>
+                <Button 
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium px-6 py-2 h-10 rounded-full shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105" 
+                  asChild
+                >
                   <a href="/login">
                     <UserIcon className="w-4 h-4 mr-2" />
                     Acceder al Obrador
                   </a>
                 </Button>
               )}
+              
+              {/* Debug Link - Always visible for testing */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 hover:bg-yellow-500/10 hover:text-yellow-600 transition-all duration-300"
+                title="Debug Tools"
+                asChild
+              >
+                <a href="/debug">
+                  <Bug className="w-4 h-4" />
+                </a>
+              </Button>
             </div>
 
-            {/* Mobile Menu Button */}
-            <div className="md:hidden">
-              <Sheet open={isOpen} onOpenChange={setIsOpen}>
-                <SheetTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    className={`${
-                      scrolled || !needsDarkBg 
-                        ? "text-gray-900 hover:bg-gray-100" 
-                        : "text-white hover:bg-white/10"
-                    }`}
-                  >
-                    <Menu className="h-6 w-6" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="right" className="w-80 bg-white">
-                  <div className="flex flex-col h-full">
-                    {/* Header */}
-                    <div className="flex items-center space-x-2 pb-6 border-b border-gray-200">
-                      <Wheat className="h-6 w-6 text-blue-600" />
-                      <span className="font-bold text-xl text-gray-900">Obrador</span>
-                    </div>
-
-                    {/* Navigation Links */}
-                    <div className="flex-1 py-6">
-                      <div className="space-y-2">
-                        <a 
-                          href="/" 
-                          className="flex items-center justify-between w-full px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg font-medium transition-all duration-300"
-                          onClick={() => setIsOpen(false)}
-                        >
-                          <span>Inicio</span>
-                          <ChevronRight className="w-4 h-4" />
-                        </a>
-                        <a 
-                          href="/productos" 
-                          className="flex items-center justify-between w-full px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg font-medium transition-all duration-300"
-                          onClick={() => setIsOpen(false)}
-                        >
-                          <span>Productos</span>
-                          <ChevronRight className="w-4 h-4" />
-                        </a>
-                        <a 
-                          href="/chef" 
-                          className="flex items-center justify-between w-full px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg font-medium transition-all duration-300"
-                          onClick={() => setIsOpen(false)}
-                        >
-                          <span>Chef</span>
-                          <ChevronRight className="w-4 h-4" />
-                        </a>
-                        <a 
-                          href="/location" 
-                          className="flex items-center justify-between w-full px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg font-medium transition-all duration-300"
-                          onClick={() => setIsOpen(false)}
-                        >
-                          <span>Ubicación</span>
-                          <ChevronRight className="w-4 h-4" />
-                        </a>
-
-                        {/* User sections when logged in */}
-                        {isLogged && (
-                          <>
-                            <div className="border-t border-gray-200 my-4"></div>
-                            <a 
-                              href="/reservas" 
-                              className="flex items-center justify-between w-full px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg font-medium transition-all duration-300"
-                              onClick={() => setIsOpen(false)}
-                            >
-                              <span>Reservas</span>
-                              <ChevronRight className="w-4 h-4" />
-                            </a>
-                            <a 
-                              href="/mis-reservas" 
-                              className="flex items-center justify-between w-full px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg font-medium transition-all duration-300"
-                              onClick={() => setIsOpen(false)}
-                            >
-                              <span>Mis Reservas</span>
-                              <ChevronRight className="w-4 h-4" />
-                            </a>
-                            {profileRole === "admin" && (
-                              <a 
-                                href="/admin" 
-                                className="flex items-center justify-between w-full px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg font-medium transition-all duration-300"
-                                onClick={() => setIsOpen(false)}
-                              >
-                                <div className="flex items-center">
-                                  <Crown className="w-4 h-4 mr-2 text-yellow-600" />
-                                  <span>Admin</span>
-                                </div>
-                                <ChevronRight className="w-4 h-4" />
-                              </a>
-                            )}
-                          </>
-                        )}
+            {/* Mobile menu */}
+            <Sheet open={isOpen} onOpenChange={setIsOpen}>
+              <SheetTrigger asChild className="md:hidden">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105"
+                >
+                  <Menu className="w-5 h-5" />
+                  <span className="sr-only">Abrir menú</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent 
+                side="right" 
+                className="w-80 border-l-0 bg-gradient-to-br from-slate-50 to-white"
+                style={{
+                  backdropFilter: 'blur(24px)',
+                  WebkitBackdropFilter: 'blur(24px)'
+                }}
+              >
+                <div className="flex flex-col h-full">
+                  {/* Logo en mobile mejorado */}
+                  <div className="flex items-center space-x-4 mb-8">
+                    <div className="relative">
+                      <div className="w-12 h-12 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-xl">
+                        <Wheat className="text-white w-6 h-6" />
+                      </div>
+                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-r from-amber-500 to-yellow-500 rounded-full flex items-center justify-center">
+                        <Crown className="w-2.5 h-2.5 text-white" />
                       </div>
                     </div>
-
-                    {/* Auth Section */}
-                    <div className="border-t border-gray-200 pt-6">
-                      {authLoading ? (
-                        <div className="flex items-center justify-center py-4">
-                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-600 border-t-transparent mr-3"></div>
-                          <span className="text-gray-600">Cargando sesión...</span>
-                        </div>
-                      ) : authWarning ? (
-                        <div className="space-y-3">
-                          <div className="flex items-center p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                            <AlertCircle className="w-5 h-5 text-yellow-600 mr-2" />
-                            <span className="text-sm text-yellow-800">{authWarning}</span>
-                          </div>
-                          <Button
-                            variant="outline"
-                            className="w-full text-yellow-600 border-yellow-300 hover:bg-yellow-50"
-                            onClick={() => { retryAuth(); setIsOpen(false) }}
-                          >
-                            Reintentar conexión
-                          </Button>
-                        </div>
-                      ) : isLogged ? (
-                        <div className="space-y-4">
-                          {emailVerified === false && (
-                            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center">
-                                  <Clock className="w-4 h-4 text-yellow-600 mr-2" />
-                                  <span className="text-sm text-yellow-800">Email pendiente de verificación</span>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={handleResendVerification}
-                                  disabled={resending}
-                                  className="text-yellow-600 hover:bg-yellow-100"
-                                >
-                                  {resending ? "..." : resent ? "✓" : "Reenviar"}
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                          
-                          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                <UserIcon className="w-5 h-5 text-blue-600" />
-                                {profileRole === "admin" && (
-                                  <Crown className="w-4 h-4 text-yellow-600" />
-                                )}
-                                <div>
-                                  <p className="font-medium text-blue-900">
-                                    {displayName}
-                                  </p>
-                                  <p className="text-xs text-blue-600">
-                                    {profileRole === "admin" ? "Administrador" : "Cliente"}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          <Button
-                            variant="outline"
-                            className="w-full h-12 text-red-500 border-red-200 hover:bg-red-50 font-medium transition-all duration-300"
-                            onClick={() => { handleSignOut(); setIsOpen(false) }}
-                            disabled={isSigningOut}
-                          >
-                            <LogOut className="w-4 h-4 mr-2" />
-                            {isSigningOut ? "Cerrando sesión..." : "Cerrar sesión"}
-                          </Button>
-                          
-                          {/* Debug Link - Mobile */}
-                          <Button
-                            variant="ghost"
-                            className="w-full h-10 text-yellow-600 hover:bg-yellow-50 font-medium transition-all duration-300 mt-2"
-                            asChild
-                            onClick={() => setIsOpen(false)}
-                          >
-                            <a href="/debug">
-                              <Bug className="w-4 h-4 mr-2" />
-                              Debug Tools
-                            </a>
-                          </Button>
-                        </div>
-                      ) : (
-                        <>
-                          <Button
-                            className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium shadow-xl hover:shadow-2xl transition-all duration-300"
-                            asChild
-                            onClick={() => setIsOpen(false)}
-                          >
-                            <a href="/login">
-                              <UserIcon className="w-4 h-4 mr-2" />
-                              Acceder al Obrador
-                            </a>
-                          </Button>
-                          
-                          {/* Debug Link - Mobile (Not logged in) */}
-                          <Button
-                            variant="ghost"
-                            className="w-full h-10 text-yellow-600 hover:bg-yellow-50 font-medium transition-all duration-300 mt-2"
-                            asChild
-                            onClick={() => setIsOpen(false)}
-                          >
-                            <a href="/debug">
-                              <Bug className="w-4 h-4 mr-2" />
-                              Debug Tools
-                            </a>
-                          </Button>
-                        </>
-                      )}
+                    <div className="flex flex-col">
+                      <span className="font-bold text-xl leading-none tracking-tight text-slate-800">Obrador</span>
+                      <span className="shimmer-title text-sm font-semibold leading-none tracking-widest">A R T E S A N A L</span>
                     </div>
                   </div>
-                </SheetContent>
-              </Sheet>
-            </div>
+
+                  {/* Banner de verificación móvil */}
+                  {isLogged && emailVerified === false && (
+                    <div className="mb-6 p-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-medium shadow-xl">
+                      <div className="flex items-center gap-3 mb-3">
+                        <AlertCircle className="w-5 h-5 animate-pulse" />
+                        <span className="font-semibold">Verificación pendiente</span>
+                      </div>
+                      <p className="text-white/90 mb-3 text-sm">Revisa tu correo para activar todas las funciones de tu cuenta.</p>
+                      <Button 
+                        size="sm" 
+                        variant="secondary"
+                        onClick={resendVerification} 
+                        disabled={resending || isSigningOut} 
+                        className="w-full bg-white/20 hover:bg-white/30 text-white border-white/30 font-medium"
+                      >
+                        {resending ? "Enviando..." : resent ? "✓ Enviado" : "Reenviar verificación"}
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Navigation links móvil */}
+                  <div className="space-y-2 mb-8">
+                    <NavLinks mobile onClose={() => setIsOpen(false)} />
+                  </div>
+
+                  {/* User section móvil mejorada */}
+                  <div className="mt-auto space-y-4">
+                    {authLoading ? (
+                      <div className="text-center py-8 flex flex-col items-center space-y-3" aria-live="polite">
+                        <div className="w-12 h-12 premium-glass rounded-full flex items-center justify-center">
+                          <UserIcon className="w-6 h-6 text-blue-600 animate-pulse" />
+                        </div>
+                        <span className="text-sm text-slate-600 font-medium">Verificando identidad...</span>
+                      </div>
+                    ) : isLogged ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center space-x-3 premium-glass p-4 rounded-xl shadow-xl">
+                          <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
+                            <UserIcon className="w-5 h-5 text-white" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-slate-800 leading-none">{displayName}</p>
+                            <p className="text-xs text-slate-600 mt-1">
+                              {profileRole === "admin" ? "Maestro Panadero" : "Cliente Artesanal"}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          className="w-full h-12 text-red-500 border-red-200 hover:bg-red-50 font-medium transition-all duration-300"
+                          onClick={() => { handleSignOut(); setIsOpen(false) }}
+                          disabled={isSigningOut}
+                        >
+                          <LogOut className="w-4 h-4 mr-2" />
+                          {isSigningOut ? "Cerrando sesión..." : "Cerrar sesión"}
+                        </Button>
+                        
+                        {/* Debug Link - Mobile */}
+                        <Button
+                          variant="ghost"
+                          className="w-full h-10 text-yellow-600 hover:bg-yellow-50 font-medium transition-all duration-300 mt-2"
+                          asChild
+                          onClick={() => setIsOpen(false)}
+                        >
+                          <a href="/debug">
+                            <Bug className="w-4 h-4 mr-2" />
+                            Debug Tools
+                          </a>
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <Button
+                          className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium shadow-xl hover:shadow-2xl transition-all duration-300"
+                          asChild
+                          onClick={() => setIsOpen(false)}
+                        >
+                          <a href="/login">
+                            <UserIcon className="w-4 h-4 mr-2" />
+                            Acceder al Obrador
+                          </a>
+                        </Button>
+                        
+                        {/* Debug Link - Mobile (Not logged in) */}
+                        <Button
+                          variant="ghost"
+                          className="w-full h-10 text-yellow-600 hover:bg-yellow-50 font-medium transition-all duration-300 mt-2"
+                          asChild
+                          onClick={() => setIsOpen(false)}
+                        >
+                          <a href="/debug">
+                            <Bug className="w-4 h-4 mr-2" />
+                            Debug Tools
+                          </a>
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
           </div>
         </div>
       </nav>
