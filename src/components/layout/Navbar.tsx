@@ -256,8 +256,6 @@ const Navbar = () => {
     }
 
     const init = async () => {
-      setAuthLoading(true)
-      setAuthWarning(null)
       
       let session = null;
       try {
