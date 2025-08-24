@@ -8,9 +8,8 @@ import { Input } from "@/components/ui/input";
 import { HeroButton } from "@/components/ui/hero-button";
 import { useToast } from "@/components/ui/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calendar as CalendarIcon, Loader2, Minus, Plus, RefreshCw, ShoppingCart, Sparkles, Search, Filter, AlertCircle } from "lucide-react";
+import { Calendar as CalendarIcon, Loader2, Minus, Plus, RefreshCw, ShoppingCart, Sparkles, Search, Filter } from "lucide-react";
 import VanillaTilt from 'vanilla-tilt';
-import { useProfileGate } from "@/hooks/useProfileGate";
 
 // Tipos
 interface AvailableProduct { product_id: string; nombre: string; slug: string; precio: number; categoria: string; imagen_url: string | null; cantidad_disponible: number; reservado: number; }
@@ -39,7 +38,6 @@ const ProductSkeleton = ({ index }: { index: number }) => (
 
 const Reservas = () => {
   const { toast } = useToast();
-  const gate = useProfileGate();
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0,10));
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState<AvailableProduct[]>([]);
@@ -49,7 +47,6 @@ const Reservas = () => {
   const tiltRefs = useRef<(TiltElement | null)[]>([]);
 
   const fetchAvailable = useCallback(async () => {
-    if (!gate.allowed) return; // no-op until gate passes
     setLoading(true);
     const { data: stockData, error: stockError } = await supabase
       .from("daily_stock")
@@ -84,9 +81,9 @@ const Reservas = () => {
 
     setProducts(merged.sort((a,b) => a.nombre.localeCompare(b.nombre)));
     setLoading(false);
-  }, [fecha, toast, gate.allowed]);
+  }, [fecha, toast]);
 
-  useEffect(() => { if (gate.allowed) { fetchAvailable(); } else { setProducts([]); } }, [fetchAvailable, gate.allowed]);
+  useEffect(() => { fetchAvailable(); }, [fetchAvailable]);
 
   // Tilt
   useEffect(() => {
@@ -116,7 +113,6 @@ const Reservas = () => {
   const total = Object.values(cart).reduce((acc, it) => acc + it.qty * it.precio, 0);
 
   const submit = async () => {
-    if (!gate.allowed) { toast({ title: "No autenticado", description: gate.error || "Inicia sesión", variant: "destructive" }); return; }
     if (Object.keys(cart).length === 0) return;
     setSubmitting(true);
     try {
@@ -162,35 +158,6 @@ const Reservas = () => {
     <div className="min-h-screen flex flex-col">
       <Navbar />
       <main className="flex-1 pt-24 pb-28">
-        {/* Gate: require session+DB profile */}
-        {gate.loading ? (
-          <section className="relative overflow-hidden py-20 md:py-28">
-            <div className="relative container mx-auto px-6 text-center max-w-5xl">
-              <div className="inline-flex items-center gap-2 px-6 py-2 premium-glass gradient-border rounded-full text-sm font-medium text-slate-800 mb-8">
-                <Sparkles className="w-4 h-4 text-blue-600" />
-                <span className="tracking-wider">PREPARANDO ENTORNO</span>
-              </div>
-              <div className="premium-glass rounded-2xl p-10 max-w-lg mx-auto flex items-center justify-center gap-3">
-                <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                <span className="text-sm text-slate-700">Verificando sesión y base de datos...</span>
-              </div>
-            </div>
-          </section>
-        ) : gate.error ? (
-          <section className="relative overflow-hidden py-20 md:py-28">
-            <div className="relative container mx-auto px-6 text-center max-w-2xl">
-              <div className="premium-glass rounded-2xl p-8 gradient-border">
-                <div className="flex items-center justify-center gap-2 mb-4 text-red-600">
-                  <AlertCircle className="w-5 h-5" />
-                  <span className="font-semibold">No se puede continuar</span>
-                </div>
-                <p className="text-sm text-slate-700 mb-6">{gate.error}</p>
-                <HeroButton variant="secondary" onClick={gate.retry}>Reintentar</HeroButton>
-              </div>
-            </div>
-          </section>
-        ) : (
-        <>
         {/* Header */}
         <section className="relative overflow-hidden py-20 md:py-28">
           <div className="absolute inset-0 pointer-events-none">
@@ -353,8 +320,6 @@ const Reservas = () => {
             </Card>
           </div>
         </section>
-        </>
-        )}
       </main>
       <Footer />
     </div>

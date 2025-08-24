@@ -18,7 +18,6 @@ import ResetPasswordRequest from "./pages/ResetPasswordRequest";
 import UpdatePassword from "./pages/UpdatePassword";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthIntegrity } from "@/hooks/useAuthIntegrity";
-import DebugOverlay from "@/components/dev/DebugOverlay";
 
 // NUEVO: Componente para restaurar scroll al top en cada cambio de ruta
 const ScrollToTop = () => {
@@ -44,7 +43,6 @@ function App() {
         <BrowserRouter>
           <ScrollToTop />
           <AppInner />
-          <DebugOverlay />
           <Sonner />
           <Toaster />
         </BrowserRouter>

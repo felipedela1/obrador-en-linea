@@ -6,15 +6,7 @@ import { HeroButton } from "@/components/ui/hero-button";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, Link } from "react-router-dom";
-import { Eye, EyeOff, Lock, Mail, User, Sparkles, Loader2, AlertCircle, ShieldCheck, WifiOff } from "lucide-react";
-import { debug } from "@/lib/debug";
-
-// Timeout helper to avoid hangs on poor networks
-const withTimeout = async <T,>(p: Promise<T>, ms = 8000, label = "op"): Promise<T> => {
-  let t: number | undefined;
-  const timeout = new Promise<never>((_, rej) => { t = window.setTimeout(() => rej(new Error(`Timeout ${label} after ${ms}ms`)), ms); });
-  try { return (await Promise.race([p, timeout])) as T; } finally { if (t) clearTimeout(t); }
-};
+import { Eye, EyeOff, Lock, Mail, User, Sparkles, Loader2, AlertCircle, ShieldCheck } from "lucide-react";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -26,79 +18,35 @@ const Register = () => {
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
 
   useEffect(() => { setMounted(true); }, []);
-
-  // Redirect away if already authenticated
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data: { session } } = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession");
-        if (!cancelled && session?.user) {
-          navigate("/", { replace: true });
-        }
-      } catch {/* ignore */}
-    })();
-    return () => { cancelled = true; };
-  }, [navigate]);
-
-  // Online/offline awareness
-  useEffect(() => {
-    const on = () => setIsOnline(true);
-    const off = () => setIsOnline(false);
-    window.addEventListener('online', on);
-    window.addEventListener('offline', off);
-    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
-  }, []);
 
   const validLength = password.length >= 7;
   const hasUpper = /[A-Z]/.test(password);
   const validPassword = validLength && hasUpper;
-  const validName = name.trim().length >= 2;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
     setError(null);
     setSuccess(false);
-
-    if (!isOnline) { setError("Sin conexión. Revisa tu red e inténtalo de nuevo."); return; }
-    if (!validName) { setError("Introduce tu nombre"); return; }
     if (!validPassword) { setError("La contraseña no cumple los requisitos"); return; }
-
-    const cleanEmail = email.trim();
-    const cleanName = name.trim();
-
     setLoading(true);
-    debug.log("auth", "register.submit", { email: cleanEmail.length ? cleanEmail[0] + "***" : "", hasUpper, validLength });
     try {
-      const { error: signErr } = await withTimeout(
-        supabase.auth.signUp({
-          email: cleanEmail,
-          password,
-          options: {
-            data: { nombre: cleanName },
-            emailRedirectTo: window.location.origin + "/auth-confirm",
-          }
-        }),
-        10000,
-        "auth.signUp"
-      );
-      if (signErr) throw signErr;
-      try { localStorage.setItem("pendingVerifyEmail", cleanEmail); } catch { /* ignore */ }
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { nombre: name },
+          emailRedirectTo: window.location.origin + "/auth-confirm"
+        }
+      });
+      if (error) throw error;
+      try { localStorage.setItem("pendingVerifyEmail", email); } catch { /* ignore */ }
       setSuccess(true);
-      debug.log("auth", "register.success", { emailMasked: cleanEmail.replace(/(^.).+(@.*$)/, "$1***$2") });
       setTimeout(() => navigate("/check-email"), 900);
     } catch (err: any) {
-      const msg = err?.message || "Error creando cuenta";
-      debug.log("auth", "register.error", { message: msg });
-      setError(
-        /already/i.test(msg) ? "Ese email ya está registrado. Inicia sesión." :
-        /rate limit|too many/i.test(msg) ? "Demasiados intentos. Prueba más tarde." :
-        msg
-      );
+      setError(err.message || "Error creando cuenta");
     } finally {
       setLoading(false);
     }
@@ -135,12 +83,6 @@ const Register = () => {
               <CardDescription id="register-desc" className="text-slate-700">Completa los campos para continuar</CardDescription>
             </CardHeader>
             <CardContent className="relative pt-0 pb-6">
-              {!isOnline && (
-                <div className="mb-4 text-xs font-medium text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-md px-3 py-2 flex items-start gap-2" role="alert" aria-live="assertive">
-                  <WifiOff className="w-4 h-4 mt-0.5" aria-hidden="true" />
-                  <span>Sin conexión. Completa cuando vuelvas a estar online.</span>
-                </div>
-              )}
               <form onSubmit={handleSubmit} className="space-y-6" aria-busy={loading} noValidate>
                 <div className="space-y-2">
                   <label htmlFor="name" className="text-sm font-medium flex items-center gap-2">
@@ -158,9 +100,6 @@ const Register = () => {
                     />
                     <User className="w-4 h-4 text-blue-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-80" aria-hidden="true" />
                   </div>
-                  {!validName && name.length > 0 && (
-                    <p className="text-[10px] text-destructive font-medium">Introduce al menos 2 caracteres.</p>
-                  )}
                 </div>
                 <div className="space-y-2">
                   <label htmlFor="email" className="text-sm font-medium flex items-center gap-2">
@@ -234,8 +173,8 @@ const Register = () => {
                 <HeroButton
                   type="submit"
                   variant="confirm"
-                  disabled={loading || !validPassword || !validName || !isOnline}
-                  aria-disabled={loading || !validPassword || !validName || !isOnline}
+                  disabled={loading || !validPassword}
+                  aria-disabled={loading || !validPassword}
                   className="w-full justify-center h-12 text-base tracking-wide"
                 >
                   {loading && <Loader2 className="w-5 h-5 mr-2 animate-spin" aria-hidden="true" />} {loading ? "Creando..." : "Crear cuenta"}
