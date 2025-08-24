@@ -73,12 +73,32 @@ export function useProfileGate() {
             if (stored) {
               const parsed = JSON.parse(stored);
               console.log("[PROFILE_GATE] Parsed data structure:", Object.keys(parsed));
-              const sess = parsed?.currentSession || parsed?.session || parsed;
+              
+              // Manejar diferentes estructuras de localStorage de Supabase
+              let sess = null;
+              
+              // Estructura v2: { currentSession: {...} }
+              if (parsed.currentSession) {
+                sess = parsed.currentSession;
+              }
+              // Estructura v1: { session: {...} }  
+              else if (parsed.session) {
+                sess = parsed.session;
+              }
+              // Estructura directa: { access_token, user, ... }
+              else if (parsed.access_token && parsed.user) {
+                sess = parsed;
+              }
+              
               if (sess?.user && sess?.access_token) {
                 console.log("[PROFILE_GATE] Found valid session in localStorage");
                 return sess;
               } else {
-                console.log("[PROFILE_GATE] Invalid session structure:", { hasUser: !!sess?.user, hasToken: !!sess?.access_token });
+                console.log("[PROFILE_GATE] Invalid session structure:", { 
+                  hasUser: !!sess?.user, 
+                  hasToken: !!sess?.access_token,
+                  sessionType: typeof sess 
+                });
               }
             }
           } catch (e) {
@@ -96,6 +116,12 @@ export function useProfileGate() {
           );
           session = res?.data?.session ?? null;
           console.log("[PROFILE_GATE] getSession succeeded:", !!session);
+          
+          // Si getSession funciona pero no devuelve sesión, intentar localStorage
+          if (!session) {
+            console.log("[PROFILE_GATE] getSession succeeded but no session, trying localStorage...");
+            session = getStoredSession();
+          }
         } catch (e: any) {
           console.warn("[PROFILE_GATE] getSession timeout, trying refresh:", e.message);
           
@@ -108,15 +134,18 @@ export function useProfileGate() {
             );
             session = refreshRes?.data?.session ?? null;
             console.log("[PROFILE_GATE] refresh succeeded:", !!session);
+            
+            // Si refresh funciona pero no devuelve sesión, intentar localStorage
+            if (!session) {
+              console.log("[PROFILE_GATE] refresh succeeded but no session, trying localStorage...");
+              session = getStoredSession();
+            }
           } catch (e2: any) {
             console.warn("[PROFILE_GATE] refresh also failed:", e2.message);
+            // Fallback final a localStorage
+            console.log("[PROFILE_GATE] Both getSession and refresh failed, trying localStorage...");
+            session = getStoredSession();
           }
-        }
-
-        // Si ambos fallan, usar localStorage como último recurso
-        if (!session) {
-          console.log("[PROFILE_GATE] Attempting localStorage fallback...");
-          session = getStoredSession();
         }
 
         const user = session?.user;

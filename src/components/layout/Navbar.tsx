@@ -247,7 +247,23 @@ const Navbar = () => {
           
           if (stored) {
             const parsed = JSON.parse(stored);
-            const fallbackSession = parsed?.currentSession || parsed?.session || parsed;
+            
+            // Manejar diferentes estructuras de localStorage de Supabase
+            let fallbackSession = null;
+            
+            // Estructura v2: { currentSession: {...} }
+            if (parsed.currentSession) {
+              fallbackSession = parsed.currentSession;
+            }
+            // Estructura v1: { session: {...} }  
+            else if (parsed.session) {
+              fallbackSession = parsed.session;
+            }
+            // Estructura directa: { access_token, user, ... }
+            else if (parsed.access_token && parsed.user) {
+              fallbackSession = parsed;
+            }
+            
             if (fallbackSession?.user && fallbackSession?.access_token) {
               session = fallbackSession;
               logPerf("auth.getSession localStorage fallback", { success: true });
