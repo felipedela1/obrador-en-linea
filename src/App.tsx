@@ -18,7 +18,6 @@ import ResetPasswordRequest from "./pages/ResetPasswordRequest";
 import UpdatePassword from "./pages/UpdatePassword";
 import Debug from "./pages/Debug";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuthIntegrity } from "@/hooks/useAuthIntegrity";
 import { checkEnvironment } from "@/lib/utils";
 
 // NUEVO: Componente para restaurar scroll al top en cada cambio de ruta
@@ -40,9 +39,6 @@ function App() {
   useEffect(() => {
     checkEnvironment();
   }, []);
-
-  // Activar vigilancia de integridad de sesión a nivel de app
-  useAuthIntegrity();
 
   return (
     <QueryClientProvider client={queryClient}>
