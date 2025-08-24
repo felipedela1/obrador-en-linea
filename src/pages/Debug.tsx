@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Copy, RefreshCw } from "lucide-react";
+import { testSupabaseConnectivity } from "@/lib/utils";
 
 export default function Debug() {
   const [info, setInfo] = useState<any>({});
@@ -55,6 +56,10 @@ export default function Debug() {
 
     // Test Supabase
     try {
+      // Test connectivity first
+      const connectivity = await testSupabaseConnectivity();
+      result.supabase.connectivity = connectivity;
+
       const start = Date.now();
       const { data, error } = await supabase.auth.getSession();
       const duration = Date.now() - start;

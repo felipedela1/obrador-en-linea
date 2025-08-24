@@ -24,3 +24,34 @@ export function checkEnvironment() {
 
   return true;
 }
+
+// Add utility to test Supabase connectivity
+export async function testSupabaseConnectivity() {
+  try {
+    const start = Date.now();
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/`,
+      {
+        method: "GET",
+        headers: {
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    const duration = Date.now() - start;
+
+    return {
+      success: response.ok,
+      duration,
+      status: response.status,
+      statusText: response.statusText,
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      duration: -1,
+      error: error.message,
+    };
+  }
+}
