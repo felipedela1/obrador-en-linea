@@ -19,6 +19,7 @@ import UpdatePassword from "./pages/UpdatePassword";
 import Debug from "./pages/Debug";
 import { supabase } from "@/integrations/supabase/client";
 import { checkEnvironment } from "@/lib/utils";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 // NUEVO: Componente para restaurar scroll al top en cada cambio de ruta
 const ScrollToTop = () => {
@@ -43,12 +44,14 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <BrowserRouter>
-          <ScrollToTop />
-          <AppInner />
-          <Sonner />
-          <Toaster />
-        </BrowserRouter>
+        <AuthProvider>
+          <BrowserRouter>
+            <ScrollToTop />
+            <AppInner />
+            <Sonner />
+            <Toaster />
+          </BrowserRouter>
+        </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

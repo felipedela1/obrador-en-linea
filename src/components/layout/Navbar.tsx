@@ -4,7 +4,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Menu, User as UserIcon, Clock, LogOut, AlertCircle, Wheat, Crown, ChevronRight } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
-import { useLocation } from "react-router-dom"
+import { useLocation, Link } from "react-router-dom"
 
 const Navbar = () => {
   const {
@@ -150,9 +150,9 @@ const Navbar = () => {
     return (
       <div className={mobile ? "flex flex-col space-y-2" : "hidden md:flex items-center space-x-10"}>
         {navLinks.map((l, index) => (
-          <a
+          <Link
             key={l.href}
-            href={l.href}
+            to={l.href}
             onClick={onClose}
             className={`group relative transition-all duration-300 ${
               mobile 
@@ -168,7 +168,7 @@ const Navbar = () => {
             {!mobile && (
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 transition-all duration-300 group-hover:w-full rounded-full" />
             )}
-          </a>
+          </Link>
         ))}
       </div>
     )
@@ -222,7 +222,7 @@ const Navbar = () => {
           
           <div className="flex items-center justify-between h-20">
             {/* Logo con efecto premium */}
-            <a href="/" className="flex items-center space-x-4 group">
+            <Link to="/" className="flex items-center space-x-4 group">
               <div className="relative">
                 <div className="w-12 h-12 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-xl hover-float transition-all duration-500">
                   <Wheat className="text-white w-6 h-6 animate-float-slow" />
@@ -235,7 +235,7 @@ const Navbar = () => {
                 <span className="font-bold text-xl leading-none tracking-tight text-slate-800 mb-2">Obrador</span>
                 <span className="shimmer-title text-sm font-semibold leading-none tracking-widest">D'LUI</span>
               </div>
-            </a>
+            </Link>
 
             {/* Desktop navigation */}
             <div className="hidden md:flex items-center justify-center flex-1">
@@ -301,10 +301,10 @@ const Navbar = () => {
                   className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium px-6 py-2 h-10 rounded-full shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105" 
                   asChild
                 >
-                  <a href="/login">
+                  <Link to="/login">
                     <UserIcon className="w-4 h-4 mr-2" />
                     Acceder al Obrador
-                  </a>
+                  </Link>
                 </Button>
               )}
             </div>
@@ -410,10 +410,10 @@ const Navbar = () => {
                           asChild
                           onClick={() => setIsOpen(false)}
                         >
-                          <a href="/login">
+                          <Link to="/login">
                             <UserIcon className="w-4 h-4 mr-2" />
                             Acceder al Obrador
-                          </a>
+                          </Link>
                         </Button>
                       </>
                     )}
