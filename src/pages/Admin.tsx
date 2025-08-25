@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { HeroButton } from "@/components/ui/hero-button";
 import { useToast } from "@/components/ui/use-toast";
-import { Upload, Plus, RefreshCw, ImageIcon, Check, Loader2, AlertCircle, Sparkles, Search, Package } from "lucide-react"; // removed unused icons
+import { Upload, Plus, RefreshCw, ImageIcon, Check, Loader2, AlertCircle, Sparkles, Search, Package } from "lucide-react";
 import { Link } from "react-router-dom"; // <-- nuevo
 
 // Simple perf log (dev only)
@@ -266,6 +266,9 @@ const Admin = () => {
 
   const filtered = products.filter(p => p.nombre.toLowerCase().includes(filter.toLowerCase()) || p.slug.toLowerCase().includes(filter.toLowerCase()));
 
+  // Controlar Tabs para poder ir al panel de reservas con un botón
+  const [activeTab, setActiveTab] = useState<"list" | "destacados" | "inactivos" | "reservas">("list");
+
   // --- NUEVO: Tipos y estado del panel de reservas (alineado con MisReservas) ---
   // --- NUEVO: estados válidos según BD y type guard ---
   const ESTADOS = ["PENDIENTE","PREPARADO","RETIRADO","CANCELADO"] as const;
@@ -403,10 +406,33 @@ const Admin = () => {
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
+                  {/* Botón que abre el panel de Reservas dentro de Admin */}
+                  <HeroButton
+                    variant="secondary"
+                    onClick={() => {
+                      setActiveTab("reservas");
+                      // Llevar la vista hasta el panel
+                      setTimeout(() => document.getElementById("admin-tabs")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+                    }}
+                    className="flex items-center h-10 bg-amber-500 hover:bg-amber-600 text-white border-0"
+                  >
+                    <Package className="w-4 h-4 mr-2" />
+                    Reservas
+                  </HeroButton>
+
                   <HeroButton variant="secondary" onClick={fetchProducts} disabled={loading} className="flex items-center h-10">
                     {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />} Refrescar
                   </HeroButton>
-                  <HeroButton variant="hero" onClick={openCreate} className="flex items-center h-10"><Plus className="w-4 h-4 mr-2" /> Nuevo</HeroButton>
+
+                  {/* + Nuevo con fondo más visible */}
+                  <HeroButton
+                    variant="hero"
+                    onClick={openCreate}
+                    className="flex items-center h-10 bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Nuevo
+                  </HeroButton>
                 </div>
               </div>
             </div>
@@ -414,14 +440,14 @@ const Admin = () => {
         </section>
 
         {/* LISTADO TABS */}
-        <section className="relative pt-4">
+        <section id="admin-tabs" className="relative pt-4">
           <div className="container mx-auto px-6" style={{ opacity: 0, animation: 'fade-in 0.8s ease forwards 0.25s' }}>
-            <Tabs defaultValue="list" className="space-y-8">
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-8">
               <TabsList className="premium-glass gradient-border">
                 <TabsTrigger value="list">Listado ({filtered.length})</TabsTrigger>
                 <TabsTrigger value="destacados">Destacados ({destacados})</TabsTrigger>
                 <TabsTrigger value="inactivos">Inactivos ({inactivos})</TabsTrigger>
-                <TabsTrigger value="reservas">Reservas</TabsTrigger>
+                {/* Eliminado: <TabsTrigger value="reservas">Reservas</TabsTrigger> */}
               </TabsList>
 
               <TabsContent value="list" className="space-y-6">
@@ -528,7 +554,8 @@ const Admin = () => {
                   ))}
                 </div>
               </TabsContent>
-              {/* NUEVO: Pestaña de Reservas */}
+
+              {/* Panel de Reservas (acceso por botón, sin pestaña visible) */}
               <TabsContent value="reservas" className="space-y-6">
                 {/* Filtros */}
                 <div className="premium-glass rounded-2xl p-4 flex flex-col lg:flex-row gap-4 lg:items-end">
@@ -582,10 +609,10 @@ const Admin = () => {
                     <Badge variant="secondary" className="bg-white/60">Activas: {reservas.filter(r => ["PENDIENTE","PREPARADO"].includes(r.estado)).length}</Badge>
                     <Badge variant="secondary" className="bg-white/60">Histórico: {reservas.filter(r => ["RETIRADO","CANCELADO"].includes(r.estado)).length}</Badge>
                   </div>
-                  <div className="text-xs text-slate-500">Filtrando por servidor (fecha/estado) y cliente (búsqueda)</div>
+                  <div className="text-xs text-slate-500">Filtrado en servidor (fecha/estado) y cliente (búsqueda)</div>
                 </div>
 
-                {/* Lista filtrada por búsqueda (cliente/código/email) */}
+                {/* Lista filtrada por búsqueda */}
                 {(() => {
                   const term = rSearch.trim().toLowerCase();
                   const list = term
@@ -674,132 +701,6 @@ const Admin = () => {
             </Tabs>
           </div>
         </section>
-
-        {/* CTA FINAL */}
-        <section className="relative py-24">
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute top-0 right-10 w-72 h-72 bg-blue-400/10 blur-3xl rounded-full animate-pulse-slow" />
-            <div className="absolute bottom-0 left-10 w-96 h-96 bg-indigo-500/10 blur-3xl rounded-full animate-pulse-medium" />
-          </div>
-          <div className="container mx-auto px-6">
-            <Card className="premium-glass rounded-3xl border-0 overflow-hidden text-center gradient-border p-0" style={{ opacity: 0, animation: 'fade-in 0.9s ease forwards 0.35s' }}>
-              <CardContent className="relative z-10 p-12 md:p-20">
-                <h2 className="text-4xl md:text-5xl font-bold mb-6 leading-tight"><span className="shimmer-title">¿Gestionar reservas?</span></h2>
-                <p className="text-lg md:text-xl text-black/85 max-w-3xl mx-auto mb-10 font-light">Accede al flujo de reservas o revisa tus pedidos para garantizar disponibilidad y consistencia.</p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center max-w-xl mx-auto">
-                  <HeroButton variant="hero" asChild><Link to="/reservas">Ir a Reservas</Link></HeroButton>
-                  <HeroButton variant="secondary" asChild><Link to="/misreservas">Mis Reservas</Link></HeroButton>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </section>
-
-        {/* FAB móvil */}
-        <div className="md:hidden fixed bottom-20 right-4 z-40">
-          <HeroButton variant="hero" className="rounded-full shadow-lg px-4 py-2" onClick={openCreate} aria-label="Nuevo producto">
-            <Plus className="w-4 h-4" />
-          </HeroButton>
-        </div>
-
-        {/* Dialog creación/edición */}
-        <Dialog open={edit.open} onOpenChange={o => setEdit(e => ({ ...e, open: o }))}>
-          <DialogContent className="max-w-2xl w-full sm:rounded-2xl premium-glass border-0">
-            <DialogHeader>
-              <DialogTitle className="pr-8 flex flex-col gap-1 text-slate-800">
-                {edit.mode === "create" ? "Nuevo producto" : `Editar: ${edit.product?.nombre}`}
-                <span className="text-xs font-normal text-slate-600">Rellena la información y guarda.</span>
-              </DialogTitle>
-            </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-2 max-h-[70vh] overflow-y-auto pr-1 md:pr-2">
-              {/* Columna izquierda */}
-              <div className="space-y-5">
-                <div className="space-y-2">
-                  <Label>Nombre</Label>
-                  <Input value={edit.product?.nombre || ""} onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, nombre: e.target.value } }))} placeholder="Ej: Baguette de masa madre" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Slug</Label>
-                    <button type="button" onClick={() => setSlugAuto(v => !v)} className="text-[10px] px-2 py-0.5 rounded border border-border/50 hover:bg-white/40">
-                      {slugAuto ? "Auto" : "Manual"}
-                    </button>
-                  </div>
-                  <Input value={edit.product?.slug || ""} disabled={slugAuto} onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, slug: e.target.value } }))} placeholder="baguette-masa-madre" />
-                  {slugAuto && <p className="text-[10px] text-slate-500">Se genera automáticamente a partir del nombre.</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label>Descripción</Label>
-                  <Textarea value={edit.product?.descripcion || ""} onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, descripcion: e.target.value } }))} placeholder="Breve descripción del producto" className="min-h-[110px]" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Precio (€)</Label>
-                    <Input type="number" step="0.01" inputMode="decimal" value={edit.product?.precio ?? 0} onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, precio: parseFloat(e.target.value) || 0 } }))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Categoría</Label>
-                    <select className="w-full rounded-md border border-input bg-background/70 px-3 py-2 text-sm" value={edit.product?.categoria} onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, categoria: e.target.value as ProductCategory } }))}>
-                      <option value="PANES">Panes</option>
-                      <option value="BOLLERIA">Bollería</option>
-                      <option value="TARTAS">Tartas</option>
-                      <option value="ESPECIALES">Especiales</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Etiquetas (separadas por coma)</Label>
-                  <Input value={(edit.product?.etiquetas || []).join(",")} onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, etiquetas: e.target.value.split(",").map(t => t.trim()).filter(Boolean) } }))} placeholder="artesano, integral, ecológico" />
-                </div>
-              </div>
-
-              {/* Columna derecha */}
-              <div className="space-y-5">
-                <div className="space-y-2">
-                  <Label>Imagen (ruta en /public)</Label>
-                  <Input type="text" placeholder="/mi-imagen.jpg" value={edit.product?.imagen_url || ""} onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, imagen_url: e.target.value } }))} />
-                  <div className="flex items-center gap-2 text-[11px] text-slate-600">
-                    <Upload className="w-3 h-3" /> Copia el archivo a /public y referencia aquí.
-                  </div>
-                  <div className="space-y-2 mt-3">
-                    <Label className="text-xs">O seleccionar archivo (simulado)</Label>
-                    <Input type="file" accept="image/*" onChange={handleImageSelect} disabled={uploading} />
-                  </div>
-                  {edit.product?.imagen_url && (
-                    <div className="mt-3 rounded-md overflow-hidden border border-white/30 bg-white/10">
-                      <div className="aspect-video w-full bg-muted/40 flex items-center justify-center overflow-hidden">
-                        <img src={edit.product.imagen_url} alt="Vista previa" className="object-cover w-full h-full" />
-                      </div>
-                      <div className="text-[10px] p-2 break-all text-center text-slate-600">{edit.product.imagen_url}</div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center justify-between rounded-md border border-white/40 px-3 py-2 bg-white/20 backdrop-blur">
-                    <Label htmlFor="activo" className="text-xs">Activo</Label>
-                    <Switch id="activo" checked={!!edit.product?.activo} onCheckedChange={v => setEdit(ed => ({ ...ed, product: { ...ed.product!, activo: v } }))} />
-                  </div>
-                  <div className="flex items-center justify-between rounded-md border border-white/40 px-3 py-2 bg-white/20 backdrop-blur">
-                    <Label htmlFor="destacado" className="text-xs">Destacado</Label>
-                    <Switch id="destacado" checked={!!edit.product?.destacado} onCheckedChange={v => setEdit(ed => ({ ...ed, product: { ...ed.product!, destacado: v } }))} />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between rounded-md border border-white/30 px-3 py-2 opacity-50 bg-white/10 backdrop-blur">
-                  <Label htmlFor="reservable" className="text-xs">Reservable</Label>
-                  <Switch id="reservable" disabled />
-                </div>
-
-                <div className="pt-2 flex flex-col sm:flex-row justify-end gap-2">
-                  <Button variant="outline" className="w-full sm:w-auto" onClick={closeDialog}>Cancelar</Button>
-                  <HeroButton variant="secondary" className="w-full sm:w-auto" onClick={saveProduct}>
-                    {edit.mode === "create" ? "Crear" : "Guardar"}
-                  </HeroButton>
-                </div>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
       </main>
       <Footer />
     </div>
@@ -807,3 +708,4 @@ const Admin = () => {
 };
 
 export default Admin;
+
