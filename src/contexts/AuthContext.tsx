@@ -66,63 +66,75 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Evitar relecturas del mismo perfil en ráfaga
   const [lastProfileUid, setLastProfileUid] = useState<string | null>(null);
 
-  type ProfileRow = { id: string; role: UserRole; nombre: string };
+  type ProfileRow = { id: string; role: UserRole; nombre: string; email?: string | null; telefono?: string | null; direccion_entrega?: string | null };
 
   const upsertProfileIfNeeded = async (u: SupaUser) => {
-    if (lastProfileUid === u.id) return; // ya lo tenemos cargado recientemente
-    setLastProfileUid(u.id);
+    const metaTel = (u.user_metadata as any)?.telefono as string | undefined;
+    const metaDir = (u.user_metadata as any)?.direccion_entrega as string | undefined;
+    const userEmail = u.email ?? null;
 
-    // 1) Leer perfil con timeout suave
-    const selPromise = supabase
+    const selRes = await supabase
       .from("profiles")
-      .select("id,role,nombre")
+      .select("id,role,nombre,email,telefono,direccion_entrega")
       .eq("user_id", u.id)
-      .maybeSingle() as unknown as Promise<{ data: ProfileRow | null; error: any }>;
+      .maybeSingle();
 
-    const sel = await withTimeout(selPromise, 4000);
+    const data = (selRes as any)?.data as ProfileRow | null;
+    const err = (selRes as any)?.error as { message?: string } | null;
 
-    if (sel === 'timeout') {
-      // Fallback sin bloquear
+    if (err) {
       setProfileRole(null);
-      setProfileName(u.user_metadata?.nombre || u.user_metadata?.name || (u.email?.split("@")[0] ?? 'Usuario'));
+      setProfileName(u.user_metadata?.nombre || u.user_metadata?.name || (userEmail?.split("@")[0] ?? 'Usuario'));
       return;
     }
 
-    if (sel.error) {
-      setProfileRole(null);
-      setProfileName(u.user_metadata?.nombre || u.user_metadata?.name || (u.email?.split("@")[0] ?? 'Usuario'));
+    if (data) {
+      const needsUpdate =
+        (userEmail && data.email !== userEmail) ||
+        (!!metaTel && !data.telefono) ||
+        (!!metaDir && !data.direccion_entrega);
+
+      if (needsUpdate) {
+        await supabase
+          .from("profiles")
+          .update({
+            email: userEmail ?? data.email ?? null,
+            telefono: data.telefono || metaTel || null,
+            direccion_entrega: data.direccion_entrega || metaDir || null,
+          })
+          .eq("user_id", u.id);
+      }
+
+      setProfileRole((data.role as UserRole) || null);
+      setProfileName(data.nombre || null);
       return;
     }
 
-    if (sel.data) {
-      setProfileRole((sel.data.role as UserRole) || null);
-      setProfileName(sel.data.nombre || null);
-      return;
-    }
-
-    // 2) Insert con timeout (no bloquear)
+    // Crear perfil mínimo con teléfono/dirección si existen en metadata
     const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || "admin@obradorencinas.com").toLowerCase();
-    const inferredRole: UserRole = (u.email && u.email.toLowerCase() === ADMIN_EMAIL) ? "admin" : "customer";
+    const inferredRole: UserRole = (userEmail && userEmail.toLowerCase() === ADMIN_EMAIL) ? "admin" : "customer";
 
-    const insPromise = supabase
+    const insRes = await supabase
       .from("profiles")
       .insert({
         user_id: u.id,
-        nombre: u.user_metadata?.nombre || u.user_metadata?.name || (u.email?.split("@")[0] ?? "Usuario"),
-        role: inferredRole
+        nombre: u.user_metadata?.nombre || u.user_metadata?.name || (userEmail?.split("@")[0] ?? "Usuario"),
+        role: inferredRole,
+        email: userEmail,
+        telefono: metaTel || null,
+        direccion_entrega: metaDir || null,
       })
       .select("role,nombre")
-      .single() as unknown as Promise<{ data: { role: UserRole; nombre: string } | null; error: any }>;
+      .single();
 
-    const ins = await withTimeout(insPromise, 4000);
-    if (ins === 'timeout' || !ins?.data) {
+    const inserted = (insRes as any)?.data as { role: UserRole; nombre: string } | null;
+    if (inserted) {
+      setProfileRole(inserted.role);
+      setProfileName(inserted.nombre);
+    } else {
       setProfileRole(null);
-      setProfileName(u.user_metadata?.nombre || u.user_metadata?.name || (u.email?.split("@")[0] ?? "Usuario"));
-      return;
+      setProfileName(u.user_metadata?.nombre || u.user_metadata?.name || (userEmail?.split("@")[0] ?? "Usuario"));
     }
-
-    setProfileRole(ins.data.role);
-    setProfileName(ins.data.nombre);
   };
 
   useEffect(() => {

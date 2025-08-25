@@ -6,13 +6,15 @@ import { HeroButton } from "@/components/ui/hero-button";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, Link } from "react-router-dom";
-import { Eye, EyeOff, Lock, Mail, User, Sparkles, Loader2, AlertCircle, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, User, Sparkles, Loader2, AlertCircle, ShieldCheck, Phone, MapPin } from "lucide-react";
 
 const Register = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,28 +23,44 @@ const Register = () => {
 
   useEffect(() => { setMounted(true); }, []);
 
+  // Validaciones
   const validLength = password.length >= 7;
   const hasUpper = /[A-Z]/.test(password);
   const validPassword = validLength && hasUpper;
+
+  const emailOk = /^\S+@\S+\.\S+$/.test(email);
+  // Acepta +34, espacios y 9 dígitos (ES). Rechaza letras.
+  const phoneSanitized = phone.replace(/[^\d+]/g, "");
+  const phoneOk = /^(\+?\d{1,3})?\d{9,12}$/.test(phoneSanitized);
+  const addressOk = address.trim().length >= 5;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
     setError(null);
     setSuccess(false);
+
+    if (!emailOk) { setError("Email no válido"); return; }
     if (!validPassword) { setError("La contraseña no cumple los requisitos"); return; }
+    if (!phoneOk) { setError("Teléfono no válido"); return; }
+    if (!addressOk) { setError("Dirección demasiado corta"); return; }
+
     setLoading(true);
     try {
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: { nombre: name },
+          data: {
+            nombre: name,
+            telefono: phoneSanitized,
+            direccion_entrega: address.trim()
+          },
           emailRedirectTo: window.location.origin + "/auth-confirm"
         }
       });
       if (error) throw error;
-      try { localStorage.setItem("pendingVerifyEmail", email); } catch { /* ignore */ }
+      try { localStorage.setItem("pendingVerifyEmail", email); } catch {}
       setSuccess(true);
       setTimeout(() => navigate("/check-email"), 900);
     } catch (err: any) {
@@ -84,6 +102,7 @@ const Register = () => {
             </CardHeader>
             <CardContent className="relative pt-0 pb-6">
               <form onSubmit={handleSubmit} className="space-y-6" aria-busy={loading} noValidate>
+                {/* Nombre */}
                 <div className="space-y-2">
                   <label htmlFor="name" className="text-sm font-medium flex items-center gap-2">
                     <User className="w-4 h-4 text-blue-600" aria-hidden="true" /> Nombre
@@ -101,6 +120,8 @@ const Register = () => {
                     <User className="w-4 h-4 text-blue-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-80" aria-hidden="true" />
                   </div>
                 </div>
+
+                {/* Email */}
                 <div className="space-y-2">
                   <label htmlFor="email" className="text-sm font-medium flex items-center gap-2">
                     <Mail className="w-4 h-4 text-blue-600" aria-hidden="true" /> Email
@@ -119,7 +140,59 @@ const Register = () => {
                     />
                     <Mail className="w-4 h-4 text-blue-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-80" aria-hidden="true" />
                   </div>
+                  {!emailOk && email.length > 0 && (
+                    <p className="text-[10px] text-destructive font-medium">Introduce un email válido.</p>
+                  )}
                 </div>
+
+                {/* Teléfono */}
+                <div className="space-y-2">
+                  <label htmlFor="phone" className="text-sm font-medium flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-blue-600" aria-hidden="true" /> Teléfono
+                  </label>
+                  <div className="relative group">
+                    <Input
+                      id="phone"
+                      inputMode="tel"
+                      placeholder="+34 612 345 678"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value)}
+                      required
+                      aria-required="true"
+                      aria-invalid={!!phone && !phoneOk}
+                      className="pl-10 bg-white/70 focus:bg-white transition-colors placeholder:text-slate-500"
+                    />
+                    <Phone className="w-4 h-4 text-blue-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-80" aria-hidden="true" />
+                  </div>
+                  {!phoneOk && phone.length > 0 && (
+                    <p className="text-[10px] text-destructive font-medium">Teléfono no válido (usa prefijo y 9 dígitos).</p>
+                  )}
+                </div>
+
+                {/* Dirección de entrega */}
+                <div className="space-y-2">
+                  <label htmlFor="address" className="text-sm font-medium flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-blue-600" aria-hidden="true" /> Dirección de entrega
+                  </label>
+                  <div className="relative group">
+                    <Input
+                      id="address"
+                      placeholder="Calle, número, piso, CP, ciudad"
+                      value={address}
+                      onChange={e => setAddress(e.target.value)}
+                      required
+                      aria-required="true"
+                      aria-invalid={!!address && !addressOk}
+                      className="pl-10 bg-white/70 focus:bg-white transition-colors placeholder:text-slate-500"
+                    />
+                    <MapPin className="w-4 h-4 text-blue-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-80" aria-hidden="true" />
+                  </div>
+                  {!addressOk && address.length > 0 && (
+                    <p className="text-[10px] text-destructive font-medium">Añade una dirección más descriptiva.</p>
+                  )}
+                </div>
+
+                {/* Password + requisitos */}
                 <div className="space-y-2">
                   <label htmlFor="password" className="text-sm font-medium flex items-center gap-2">
                     <Lock className="w-4 h-4 text-blue-600" aria-hidden="true" /> Contraseña
@@ -158,6 +231,7 @@ const Register = () => {
                     <p className="text-[10px] text-destructive font-medium">La contraseña no cumple los requisitos.</p>
                   )}
                 </div>
+
                 {error && (
                   <div id="register-error" role="alert" aria-live="assertive" className="text-xs font-medium text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-3 py-2 flex items-start gap-2 animate-in fade-in">
                     <AlertCircle className="w-4 h-4 mt-0.5" aria-hidden="true" />
@@ -173,8 +247,8 @@ const Register = () => {
                 <HeroButton
                   type="submit"
                   variant="confirm"
-                  disabled={loading || !validPassword}
-                  aria-disabled={loading || !validPassword}
+                  disabled={loading || !validPassword || !emailOk || !phoneOk || !addressOk}
+                  aria-disabled={loading || !validPassword || !emailOk || !phoneOk || !addressOk}
                   className="w-full justify-center h-12 text-base tracking-wide"
                 >
                   {loading && <Loader2 className="w-5 h-5 mr-2 animate-spin" aria-hidden="true" />} {loading ? "Creando..." : "Crear cuenta"}
