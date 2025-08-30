@@ -161,45 +161,44 @@ const Reservas = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      <main className="flex-1 pt-16 pb-20"> {/* header más pequeño: pt-16 pb-20 */}
+      <main className="flex-1 pt-0 pb-16"> {/* Quitar espacio arriba, menos padding abajo */}
         {/* Header */}
-        <section className="relative overflow-hidden py-10 md:py-14"> {/* menos padding vertical */}
+        <section className="relative overflow-hidden py-6 md:py-10"> {/* menos padding vertical */}
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute -top-10 -left-10 w-72 h-72 bg-blue-400/20 blur-3xl rounded-full animate-pulse-slow" />
             <div className="absolute top-1/2 -right-10 w-96 h-96 bg-indigo-500/10 blur-3xl rounded-full animate-pulse-medium" />
             <div className="absolute bottom-0 left-1/3 w-[40rem] h-[40rem] bg-sky-400/5 blur-[120px] rounded-full animate-pulse-fast" />
           </div>
-          <div className="relative container mx-auto px-6 text-center max-w-3xl" style={{opacity:0, animation:'fade-in 0.8s ease forwards'}}>
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 premium-glass gradient-border rounded-full text-xs font-medium text-slate-800 mb-4"> {/* más pequeño */}
+          <div className="relative container mx-auto px-4 sm:px-6 text-center max-w-2xl" style={{opacity:0, animation:'fade-in 0.8s ease forwards'}}>
+            <div className="inline-flex items-center gap-2 px-3 py-1 premium-glass gradient-border rounded-full text-xs font-medium text-slate-800 mb-3">
               <Sparkles className="w-4 h-4 text-blue-600" />
               <span className="tracking-wider">GESTIONA TU RESERVA</span>
             </div>
-            <h1 className="text-3xl md:text-5xl font-bold mb-3 leading-tight"><span className="shimmer-title">Reservas</span></h1> {/* más pequeño */}
-            <p className="text-base md:text-lg text-black/90 max-w-2xl mx-auto leading-relaxed font-light">Selecciona y confirma tus piezas artesanales para recoger en la fecha elegida.</p>
-            <div className="h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent max-w-48 mx-auto mt-4" /> {/* menos espacio */}
+            <h1 className="text-2xl md:text-4xl font-bold mb-2 leading-tight"><span className="shimmer-title">Reservas</span></h1>
+            <p className="text-sm md:text-lg text-black/90 max-w-xl mx-auto leading-relaxed font-light">Selecciona y confirma tus piezas artesanales para recoger en la fecha elegida.</p>
+            <div className="h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent max-w-32 mx-auto mt-3" />
           </div>
         </section>
 
         {/* Filtros */}
-        <section className="relative py-4 -mt-10">
-          <div className="container mx-auto px-6">
-            <div className="premium-glass rounded-2xl p-6 md:p-8 gradient-border space-y-6" style={{opacity:0, animation:'fade-in 0.8s ease forwards 0.15s'}}>
-              <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-end justify-between">
-                <div className="flex flex-col md:flex-row gap-4 w-full lg:w-auto">
-                  <div className="relative">
+        <section className="relative py-2"> {/* menos padding, quitar -mt-10 */}
+          <div className="container mx-auto px-4 sm:px-6">
+            <div className="premium-glass rounded-2xl p-4 md:p-6 gradient-border space-y-4">
+              <div className="flex flex-col md:flex-row gap-4 md:gap-6 items-stretch md:items-end justify-between w-full">
+                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                  <div className="relative flex-1">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600 w-4 h-4" />
-                    <Input placeholder="Buscar productos..." className="pl-12 w-full md:w-72 bg-white/60 backdrop-blur placeholder:text-slate-500 focus-visible:ring-blue-500" value={filter} onChange={e => setFilter(e.target.value)} aria-label="Buscar productos" />
+                    <Input placeholder="Buscar productos..." className="pl-12 w-full bg-white/60 backdrop-blur placeholder:text-slate-500 focus-visible:ring-blue-500 text-sm" value={filter} onChange={e => setFilter(e.target.value)} aria-label="Buscar productos" />
                   </div>
-                  <div className="relative flex items-center">
+                  <div className="relative flex-1 min-w-[140px]">
                     <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600 w-4 h-4" />
-                    <Input type="date" value={fecha} onChange={e => setFecha(e.target.value)} className="pl-12 w-full md:w-48 bg-white/60 backdrop-blur" aria-label="Fecha de recogida" />
+                    <Input type="date" value={fecha} onChange={e => setFecha(e.target.value)} className="pl-12 w-full bg-white/60 backdrop-blur text-sm" aria-label="Fecha de recogida" />
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <Badge variant="secondary" className="bg-white/50 text-slate-800 px-3 py-1 rounded-full"><Filter className="w-3 h-3 mr-1 text-blue-600" /> {filtered.length}/{products.length} visibles</Badge>
-                  <Badge variant="secondary" className="bg-white/40 text-slate-700 rounded-full">{loading ? 'Cargando stock...' : 'Stock actualizado'}</Badge>
-                  <HeroButton variant="secondary" onClick={fetchAvailable} disabled={loading} className="flex items-center h-10">{loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />} Actualizar</HeroButton>
-                  <HeroButton variant="confirm" disabled={submitting || cartCount===0} onClick={submit} className="flex items-center h-10">{submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShoppingCart className="w-4 h-4 mr-2" />} Confirmar ({cartCount})</HeroButton>
+                <div className="flex flex-wrap gap-2 items-center justify-end w-full md:w-auto mt-2 md:mt-0">
+                  <Badge variant="secondary" className="bg-white/50 text-slate-800 px-3 py-1 rounded-full text-xs"><Filter className="w-3 h-3 mr-1 text-blue-600" /> {filtered.length}/{products.length} visibles</Badge>
+                  <Badge variant="secondary" className="bg-white/40 text-slate-700 rounded-full text-xs">{loading ? 'Cargando stock...' : 'Stock actualizado'}</Badge>
+                  <HeroButton variant="secondary" onClick={fetchAvailable} disabled={loading} className="flex items-center h-9 text-xs px-4">{loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />} Actualizar</HeroButton>
                 </div>
               </div>
             </div>
@@ -207,8 +206,8 @@ const Reservas = () => {
         </section>
 
         {/* Tabs */}
-        <section className="relative pt-8">
-          <div className="container mx-auto px-6" style={{opacity:0, animation:'fade-in 0.8s ease forwards 0.25s'}}>
+        <section className="relative pt-6">
+          <div className="container mx-auto px-4 sm:px-6" style={{opacity:0, animation:'fade-in 0.8s ease forwards 0.25s'}}>
             <Tabs defaultValue="grid" className="space-y-8">
               <TabsList className="premium-glass gradient-border">
                 <TabsTrigger value="grid">Productos ({filtered.length})</TabsTrigger>
@@ -295,11 +294,11 @@ const Reservas = () => {
                       <div className="text-sm font-semibold text-slate-700">Total</div>
                       <div className="text-xl font-bold shimmer-title">{total.toFixed(2)}€</div>
                     </div>
-                    <div className="flex justify-end gap-3"> {/* Añadido gap para separar botones */}
-                      <HeroButton variant="confirm" disabled={submitting} onClick={submit} className="min-w-[200px] h-12 text-base">
+                    <div className="flex flex-col sm:flex-row justify-end gap-3 w-full">
+                      <HeroButton variant="confirm" disabled={submitting} onClick={submit} className="min-w-[180px] h-12 text-base">
                         {submitting ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <ShoppingCart className="w-5 h-5 mr-2" />} Confirmar reserva
                       </HeroButton>
-                      <HeroButton variant="confirm" onClick={() => navigate("/misreservas") } className="min-w-[200px] h-12 text-base bg-emerald-600 hover:bg-emerald-700">
+                      <HeroButton variant="confirm" onClick={() => navigate("/misreservas") } className="min-w-[180px] h-12 text-base bg-emerald-600 hover:bg-emerald-700">
                         Mis Reservas
                       </HeroButton>
                     </div>
