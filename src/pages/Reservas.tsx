@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar as CalendarIcon, Loader2, Minus, Plus, RefreshCw, ShoppingCart, Sparkles, Search, Filter, AlertCircle } from "lucide-react";
 import VanillaTilt from 'vanilla-tilt';
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 // Tipos
 interface AvailableProduct { product_id: string; nombre: string; slug: string; precio: number; categoria: string; imagen_url: string | null; cantidad_disponible: number; reservado: number; }
@@ -39,6 +40,7 @@ const ProductSkeleton = ({ index }: { index: number }) => (
 
 const Reservas = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0,10));
   const [loading, setLoading] = useState(false);
@@ -159,22 +161,22 @@ const Reservas = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      <main className="flex-1 pt-24 pb-28">
+      <main className="flex-1 pt-16 pb-20"> {/* header más pequeño: pt-16 pb-20 */}
         {/* Header */}
-        <section className="relative overflow-hidden py-20 md:py-28">
+        <section className="relative overflow-hidden py-10 md:py-14"> {/* menos padding vertical */}
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute -top-10 -left-10 w-72 h-72 bg-blue-400/20 blur-3xl rounded-full animate-pulse-slow" />
             <div className="absolute top-1/2 -right-10 w-96 h-96 bg-indigo-500/10 blur-3xl rounded-full animate-pulse-medium" />
             <div className="absolute bottom-0 left-1/3 w-[40rem] h-[40rem] bg-sky-400/5 blur-[120px] rounded-full animate-pulse-fast" />
           </div>
-          <div className="relative container mx-auto px-6 text-center max-w-5xl" style={{opacity:0, animation:'fade-in 0.8s ease forwards'}}>
-            <div className="inline-flex items-center gap-2 px-6 py-2 premium-glass gradient-border rounded-full text-sm font-medium text-slate-800 mb-8">
+          <div className="relative container mx-auto px-6 text-center max-w-3xl" style={{opacity:0, animation:'fade-in 0.8s ease forwards'}}>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 premium-glass gradient-border rounded-full text-xs font-medium text-slate-800 mb-4"> {/* más pequeño */}
               <Sparkles className="w-4 h-4 text-blue-600" />
               <span className="tracking-wider">GESTIONA TU RESERVA</span>
             </div>
-            <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight"><span className="shimmer-title">Reservas</span></h1>
-            <p className="text-xl md:text-2xl text-black/90 max-w-3xl mx-auto leading-relaxed font-light">Selecciona y confirma tus piezas artesanales para recoger en la fecha elegida.</p>
-            <div className="h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent max-w-64 mx-auto mt-8" />
+            <h1 className="text-3xl md:text-5xl font-bold mb-3 leading-tight"><span className="shimmer-title">Reservas</span></h1> {/* más pequeño */}
+            <p className="text-base md:text-lg text-black/90 max-w-2xl mx-auto leading-relaxed font-light">Selecciona y confirma tus piezas artesanales para recoger en la fecha elegida.</p>
+            <div className="h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent max-w-48 mx-auto mt-4" /> {/* menos espacio */}
           </div>
         </section>
 
@@ -293,33 +295,18 @@ const Reservas = () => {
                       <div className="text-sm font-semibold text-slate-700">Total</div>
                       <div className="text-xl font-bold shimmer-title">{total.toFixed(2)}€</div>
                     </div>
-                    <div className="flex justify-end">
-                      <HeroButton variant="confirm" disabled={submitting} onClick={submit} className="min-w-[200px] h-12 text-base">{submitting ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <ShoppingCart className="w-5 h-5 mr-2" />} Confirmar reserva</HeroButton>
+                    <div className="flex justify-end gap-3"> {/* Añadido gap para separar botones */}
+                      <HeroButton variant="confirm" disabled={submitting} onClick={submit} className="min-w-[200px] h-12 text-base">
+                        {submitting ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <ShoppingCart className="w-5 h-5 mr-2" />} Confirmar reserva
+                      </HeroButton>
+                      <HeroButton variant="confirm" onClick={() => navigate("/misreservas") } className="min-w-[200px] h-12 text-base bg-emerald-600 hover:bg-emerald-700">
+                        Mis Reservas
+                      </HeroButton>
                     </div>
                   </div>
                 )}
               </TabsContent>
             </Tabs>
-          </div>
-        </section>
-
-        {/* CTA final */}
-        <section className="relative py-24">
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute top-0 right-10 w-72 h-72 bg-blue-400/10 blur-3xl rounded-full animate-pulse-slow" />
-            <div className="absolute bottom-0 left-10 w-96 h-96 bg-indigo-500/10 blur-3xl rounded-full animate-pulse-medium" />
-          </div>
-          <div className="container mx-auto px-6">
-            <Card className="premium-glass rounded-3xl border-0 overflow-hidden text-center gradient-border p-0" style={{opacity:0, animation:'fade-in 0.9s ease forwards 0.35s'}}>
-              <CardContent className="relative z-10 p-12 md:p-20">
-                <h2 className="text-4xl md:text-5xl font-bold mb-6 leading-tight"><span className="shimmer-title">¿Ya hiciste tu reserva?</span></h2>
-                <p className="text-lg md:text-xl text-black/85 max-w-3xl mx-auto mb-10 font-light">Consulta el estado de tus pedidos o descubre nuevos productos disponibles hoy.</p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center max-w-xl mx-auto">
-                  <HeroButton variant="hero" asChild><a href="/misreservas">Ver mis reservas</a></HeroButton>
-                  <HeroButton variant="secondary" asChild><a href="/productos">Ver catálogo</a></HeroButton>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </section>
       </main>
