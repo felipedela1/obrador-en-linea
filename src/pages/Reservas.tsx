@@ -40,6 +40,7 @@ const ProductSkeleton = ({ index }: { index: number }) => (
 
 const Reservas = () => {
   const { toast } = useToast();
+  // Añadir navegación para "Mis Reservas"
   const navigate = useNavigate();
 
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0,10));
@@ -161,29 +162,28 @@ const Reservas = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      <main className="flex-1 pt-0 pb-16"> {/* Quitar espacio arriba, menos padding abajo */}
-        {/* Header */}
-        <section className="relative overflow-hidden py-6 md:py-10"> {/* menos padding vertical */}
+      <main className="flex-1 pt-0 pb-16"> {/* Compactar espaciado superior/inferior */}
+        {/* Header al estilo de otras pantallas (hero grande) */}
+        <section className="relative overflow-hidden py-20 md:py-28">
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute -top-10 -left-10 w-72 h-72 bg-blue-400/20 blur-3xl rounded-full animate-pulse-slow" />
             <div className="absolute top-1/2 -right-10 w-96 h-96 bg-indigo-500/10 blur-3xl rounded-full animate-pulse-medium" />
             <div className="absolute bottom-0 left-1/3 w-[40rem] h-[40rem] bg-sky-400/5 blur-[120px] rounded-full animate-pulse-fast" />
           </div>
-          <div className="relative container mx-auto px-4 sm:px-6 text-center max-w-2xl" style={{opacity:0, animation:'fade-in 0.8s ease forwards'}}>
-            <div className="inline-flex items-center gap-2 px-3 py-1 premium-glass gradient-border rounded-full text-xs font-medium text-slate-800 mb-3">
+          <div className="relative container mx-auto px-6 text-center max-w-5xl" style={{opacity:0, animation:'fade-in 0.8s ease forwards'}}>
+            <div className="inline-flex items-center gap-2 px-6 py-2 premium-glass gradient-border rounded-full text-sm font-medium text-slate-800 mb-8">
               <Sparkles className="w-4 h-4 text-blue-600" />
               <span className="tracking-wider">GESTIONA TU RESERVA</span>
             </div>
-            <h1 className="text-2xl md:text-4xl font-bold mb-2 leading-tight"><span className="shimmer-title">Reservas</span></h1>
-            <p className="text-sm md:text-lg text-black/90 max-w-xl mx-auto leading-relaxed font-light">Selecciona y confirma tus piezas artesanales para recoger en la fecha elegida.</p>
-            <div className="h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent max-w-32 mx-auto mt-3" />
+            <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight"><span className="shimmer-title">Reservas</span></h1>
+            <p className="text-xl md:text-2xl text-black/90 max-w-3xl mx-auto leading-relaxed font-light">Selecciona y confirma tus piezas artesanales para recoger en la fecha elegida.</p>
+            <div className="h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent max-w-64 mx-auto mt-8" />
           </div>
         </section>
-
-        {/* Filtros */}
-        <section className="relative py-2"> {/* menos padding, quitar -mt-10 */}
+        {/* Filtros compactos */}
+        <section className="relative py-2"> {/* menos padding, sin -mt */}
           <div className="container mx-auto px-4 sm:px-6">
-            <div className="premium-glass rounded-2xl p-4 md:p-6 gradient-border space-y-4">
+            <div className="premium-glass rounded-2xl p-4 md:p-6 gradient-border space-y-4" style={{opacity:0, animation:'fade-in 0.8s ease forwards 0.15s'}}>
               <div className="flex flex-col md:flex-row gap-4 md:gap-6 items-stretch md:items-end justify-between w-full">
                 <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
                   <div className="relative flex-1">
@@ -199,6 +199,12 @@ const Reservas = () => {
                   <Badge variant="secondary" className="bg-white/50 text-slate-800 px-3 py-1 rounded-full text-xs"><Filter className="w-3 h-3 mr-1 text-blue-600" /> {filtered.length}/{products.length} visibles</Badge>
                   <Badge variant="secondary" className="bg-white/40 text-slate-700 rounded-full text-xs">{loading ? 'Cargando stock...' : 'Stock actualizado'}</Badge>
                   <HeroButton variant="secondary" onClick={fetchAvailable} disabled={loading} className="flex items-center h-9 text-xs px-4">{loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />} Actualizar</HeroButton>
+                  {/* Dejar el acceso rápido a confirmar si hay carrito */}
+                  <HeroButton variant="confirm" disabled={submitting || cartCount===0} onClick={submit} className="flex items-center h-9 text-xs px-4">{submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShoppingCart className="w-4 h-4 mr-2" />} Confirmar ({cartCount})</HeroButton>
+                  {/* Botón Mis Reservas siempre visible */}
+                  <HeroButton variant="confirm" onClick={() => navigate("/misreservas")} className="flex items-center h-9 text-xs px-4 bg-emerald-600 hover:bg-emerald-700">
+                    Mis Reservas
+                  </HeroButton>
                 </div>
               </div>
             </div>
@@ -206,8 +212,8 @@ const Reservas = () => {
         </section>
 
         {/* Tabs */}
-        <section className="relative pt-6">
-          <div className="container mx-auto px-4 sm:px-6" style={{opacity:0, animation:'fade-in 0.8s ease forwards 0.25s'}}>
+        <section className="relative pt-6">{/* Tabs con menor separación superior */}
+          <div className="container mx-auto px-6" style={{opacity:0, animation:'fade-in 0.8s ease forwards 0.25s'}}>
             <Tabs defaultValue="grid" className="space-y-8">
               <TabsList className="premium-glass gradient-border">
                 <TabsTrigger value="grid">Productos ({filtered.length})</TabsTrigger>
@@ -294,11 +300,12 @@ const Reservas = () => {
                       <div className="text-sm font-semibold text-slate-700">Total</div>
                       <div className="text-xl font-bold shimmer-title">{total.toFixed(2)}€</div>
                     </div>
+                    {/* Acciones del carrito: Confirmar + Mis Reservas */}
                     <div className="flex flex-col sm:flex-row justify-end gap-3 w-full">
-                      <HeroButton variant="confirm" disabled={submitting} onClick={submit} className="min-w-[180px] h-12 text-base">
+                      <HeroButton variant="confirm" disabled={submitting} onClick={submit} className="min-w-[200px] h-12 text-base">
                         {submitting ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <ShoppingCart className="w-5 h-5 mr-2" />} Confirmar reserva
                       </HeroButton>
-                      <HeroButton variant="confirm" onClick={() => navigate("/misreservas") } className="min-w-[180px] h-12 text-base bg-emerald-600 hover:bg-emerald-700">
+                      <HeroButton variant="confirm" onClick={() => navigate("/misreservas")} className="min-w-[200px] h-12 text-base bg-emerald-600 hover:bg-emerald-700">
                         Mis Reservas
                       </HeroButton>
                     </div>

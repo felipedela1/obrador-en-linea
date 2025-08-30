@@ -40,7 +40,7 @@ const CheckEmail = () => {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
-      <main className="flex-1 flex items-center justify-center px-4 pt-20 pb-10">
+      <main className="flex-1 flex items-center justify-center px-4 pt-0 pb-10">
         <div className="max-w-md text-center space-y-6">
           <h1 className="text-3xl font-bold">Revisa tu correo</h1>
           <p className="text-sm text-muted-foreground leading-relaxed">

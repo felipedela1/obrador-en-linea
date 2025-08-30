@@ -193,7 +193,7 @@ const Navbar = () => {
         <div className="pointer-events-none absolute inset-0 opacity-60 mix-blend-overlay">
           <div className="w-full h-full bg-gradient-to-r from-blue-200/30 via-transparent to-indigo-200/30 dark:from-blue-900/20 dark:via-transparent dark:to-indigo-900/20" />
         </div>
-        <div className="container mx-auto px-6 relative">
+        <div className="container mx-auto px-4 sm:px-6 relative">
           {/* Banner de verificación mejorado */}
           {isLogged && emailVerified === false && (
             <div 

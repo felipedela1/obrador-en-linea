@@ -131,7 +131,7 @@ const MisReservas = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      <main className="flex-1 pt-24 pb-28">
+      <main className="flex-1 pt-0 pb-28">
         {/* HERO HEADER */}
         <section className="relative overflow-hidden py-20 md:py-28">
           <div className="absolute inset-0 pointer-events-none">
@@ -151,7 +151,7 @@ const MisReservas = () => {
         </section>
 
         {/* CONTROLES / RESUMEN */}
-        <section className="relative -mt-10 pb-8">
+        <section className="relative py-2">
           <div className="container mx-auto px-6">
             <div className="premium-glass rounded-2xl p-6 md:p-8 gradient-border space-y-6" style={{ opacity: 0, animation: 'fade-in 0.8s ease forwards 0.15s' }}>
               <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-end justify-between">

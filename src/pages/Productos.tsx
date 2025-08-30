@@ -152,7 +152,7 @@ const Productos = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      <main className="flex-1 pt-24 pb-24">
+      <main className="flex-1 pt-0 pb-24">
         {/* Header Premium */}
         <section className="relative overflow-hidden py-24">
           {/* Esferas y decoración */}
@@ -305,28 +305,6 @@ const Productos = () => {
                 ))}
               </div>
             )}
-          </div>
-        </section>
-
-        {/* CTA Final */}
-        <section className="relative py-28">
-          <div className="container mx-auto px-6">
-            <Card className="premium-glass rounded-3xl border-0 overflow-hidden text-center gradient-border p-0">
-              <CardContent className="relative z-10 p-12 md:p-20">
-                <h2 className="text-4xl md:text-5xl font-bold mb-6 leading-tight"><span className="shimmer-title">¿Buscas algo especial?</span></h2>
-                <p className="text-lg md:text-xl text-black/85 max-w-3xl mx-auto mb-10 font-light">
-                  Elaboramos piezas únicas para eventos, celebraciones y degustaciones privadas. Cuéntanos tu idea y la haremos realidad.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center max-w-xl mx-auto">
-                  <HeroButton variant="hero" asChild>
-                    <a href="/reservas#encargos">Contactar para encargos</a>
-                  </HeroButton>
-                  <HeroButton variant="secondary" asChild>
-                    <a href="/reservas">Ver disponibilidad</a>
-                  </HeroButton>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </section>
       </main>
