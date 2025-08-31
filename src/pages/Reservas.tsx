@@ -43,7 +43,20 @@ const Reservas = () => {
   // Añadir navegación para "Mis Reservas"
   const navigate = useNavigate();
 
-  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0,10));
+  // Utilidades de fecha local
+  const getLocalDateStr = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const getTomorrowStr = () => {
+    const now = new Date();
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    return getLocalDateStr(tomorrow);
+  };
+
+  const [fecha, setFecha] = useState(() => getTomorrowStr());
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState<AvailableProduct[]>([]);
   const [cart, setCart] = useState<Record<string, CartItem>>({});
@@ -121,6 +134,24 @@ const Reservas = () => {
     if (Object.keys(cart).length === 0) return;
     setSubmitting(true);
     try {
+      // Bloquear creación entre 00:00 y 07:00
+      const now = new Date();
+      const hour = now.getHours();
+      if (hour < 7) {
+        toast({ title: "Fuera de horario", description: "Las reservas se pueden crear de 07:00 a 24:00.", variant: "destructive" });
+        setSubmitting(false);
+        return;
+      }
+
+      // Asegurar que la fecha sea al menos mañana
+      const selected = new Date(`${fecha}T00:00:00`);
+      const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      if (selected < tomorrowStart) {
+        toast({ title: "Fecha inválida", description: "La fecha de recogida debe ser el día siguiente.", variant: "destructive" });
+        setSubmitting(false);
+        return;
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { toast({ title: "No autenticado", description: "Inicia sesión", variant: "destructive" }); setSubmitting(false); return; }
       const { data: resData, error: resErr } = await supabase
@@ -192,7 +223,7 @@ const Reservas = () => {
                   </div>
                   <div className="relative flex-1 min-w-[140px]">
                     <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600 w-4 h-4" />
-                    <Input type="date" value={fecha} onChange={e => setFecha(e.target.value)} className="pl-12 w-full bg-white/60 backdrop-blur text-sm" aria-label="Fecha de recogida" />
+                    <Input type="date" value={fecha} onChange={e => setFecha(e.target.value)} min={getTomorrowStr()} className="pl-12 w-full bg-white/60 backdrop-blur text-sm" aria-label="Fecha de recogida" />
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 items-center justify-end w-full md:w-auto mt-2 md:mt-0">
@@ -200,7 +231,7 @@ const Reservas = () => {
                   <Badge variant="secondary" className="bg-white/40 text-slate-700 rounded-full text-xs">{loading ? 'Cargando stock...' : 'Stock actualizado'}</Badge>
                   <HeroButton variant="secondary" onClick={fetchAvailable} disabled={loading} className="flex items-center h-9 text-xs px-4">{loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />} Actualizar</HeroButton>
                   {/* Dejar el acceso rápido a confirmar si hay carrito */}
-                  <HeroButton variant="confirm" disabled={submitting || cartCount===0} onClick={submit} className="flex items-center h-9 text-xs px-4">{submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShoppingCart className="w-4 h-4 mr-2" />} Confirmar ({cartCount})</HeroButton>
+                  <HeroButton variant="confirm" disabled={submitting || cartCount===0 || new Date().getHours() < 7} onClick={submit} className="flex items-center h-9 text-xs px-4">{submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShoppingCart className="w-4 h-4 mr-2" />} Confirmar ({cartCount})</HeroButton>
                   {/* Botón Mis Reservas siempre visible */}
                   <HeroButton variant="confirm" onClick={() => navigate("/misreservas")} className="flex items-center h-9 text-xs px-4 bg-emerald-600 hover:bg-emerald-700">
                     Mis Reservas

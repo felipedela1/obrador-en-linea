@@ -35,6 +35,9 @@ interface Reservation {
 const estadoInfo: Record<string, { label: string; variant: string }> = {
   PENDIENTE: { label: "Pendiente", variant: "secondary" },
   PREPARADO: { label: "Preparado", variant: "outline" },
+  RETIRADO: { label: "Entregado", variant: "outline" },
+  CANCELADO: { label: "Cancelada", variant: "destructive" },
+  // Alias por compatibilidad si llegaran valores antiguos
   ENTREGADO: { label: "Entregado", variant: "outline" },
   CANCELADA: { label: "Cancelada", variant: "destructive" }
 }
@@ -106,22 +109,32 @@ const MisReservas = () => {
 
   const refresh = async () => { if (refreshing) return; setRefreshing(true); await load(); setRefreshing(false) }
 
+  // Una reserva solo se puede cancelar dentro de las 24h posteriores a su creación
+  const canCancel = useCallback((r: Reservation) => {
+    const createdAt = new Date(r.created_at).getTime()
+    const now = Date.now()
+    const diffMs = now - createdAt
+    const hours = diffMs / (1000 * 60 * 60)
+    return hours <= 24
+  }, [])
+
   const cancelReservation = async (id: string) => {
     setCancellingId(id)
     try {
       const r = reservas.find(r => r.id === id)
       if (!r) return
       if (r.estado !== "PENDIENTE") { toast({ title: "No se puede cancelar", description: "Solo reservas pendientes", variant: "destructive" }); setCancellingId(null); return }
+      if (!canCancel(r)) { toast({ title: "No se puede cancelar", description: "Han pasado más de 24 horas desde su creación.", variant: "destructive" }); setCancellingId(null); return }
       const { error } = await supabase.from("reservations").update({ estado: "CANCELADO" }).eq("id", id).eq("estado", "PENDIENTE")
       if (error) throw error
-      setReservas(rs => rs.map(x => x.id === id ? { ...x, estado: "CANCELADA" } : x))
+      setReservas(rs => rs.map(x => x.id === id ? { ...x, estado: "CANCELADO" } : x))
       toast({ title: "Reserva cancelada" })
     } catch (e: any) { toast({ title: "Error cancelando", description: e.message, variant: "destructive" }) } finally { setCancellingId(null) }
   }
 
   const filtered = reservas.filter(r => {
     if (filterEstado === "activas") return ["PENDIENTE", "PREPARADO"].includes(r.estado)
-    if (filterEstado === "historico") return ["ENTREGADO", "CANCELADA"].includes(r.estado)
+    if (filterEstado === "historico") return ["RETIRADO", "CANCELADO"].includes(r.estado)
     return true
   })
 
@@ -223,7 +236,13 @@ const MisReservas = () => {
                             )}
                           </div>
                           {res.estado === "PENDIENTE" && (
-                            <HeroButton variant="hero" disabled={cancellingId === res.id} onClick={() => cancelReservation(res.id)} className="h-10">
+                            <HeroButton
+                              variant="hero"
+                              disabled={cancellingId === res.id || !canCancel(res)}
+                              onClick={() => cancelReservation(res.id)}
+                              className="h-10"
+                              title={!canCancel(res) ? "No cancelable tras 24h desde su creación" : undefined}
+                            >
                               {cancellingId === res.id && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Cancelar
                             </HeroButton>
                           )}

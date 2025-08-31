@@ -6,7 +6,7 @@ import type { ProductRow, ProductCategory } from "@/types/models";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; // fixed path
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
@@ -14,8 +14,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { HeroButton } from "@/components/ui/hero-button";
 import { useToast } from "@/components/ui/use-toast";
-import { Upload, Plus, RefreshCw, ImageIcon, Check, Loader2, AlertCircle, Sparkles, Search, Package } from "lucide-react";
+import { Upload, Plus, RefreshCw, ImageIcon, Check, Loader2, AlertCircle, Sparkles, Search, Package, XCircle } from "lucide-react";
 import { Link } from "react-router-dom"; // <-- nuevo
+import { Checkbox } from "@/components/ui/checkbox";
+// NUEVO: AlertDialog para confirmaciones bonitas
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Simple perf log (dev only)
 const logPerf = (label: string, info: Record<string, any>) => {
@@ -293,6 +305,104 @@ const Admin = () => {
   const [reservasProfiles, setReservasProfiles] = useState<Record<string, ProfileBasic>>({});
   const [reservasError, setReservasError] = useState<string | null>(null);
 
+  // NUEVO: selección y guardado por-reserva
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
+
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (checked) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const canAccept = (r: AdminReserva) => r.estado === "PENDIENTE";
+  const canCancel = (r: AdminReserva) => r.estado !== "CANCELADO" && r.estado !== "RETIRADO";
+
+  const updateReservaEstado = async (id: string, next: EstadoExacto) => {
+    setSavingIds(m => ({ ...m, [id]: true }));
+    const { error } = await supabase.from("reservations").update({ estado: next }).eq("id", id);
+    if (error) {
+      toast({ title: "Error actualizando reserva", description: error.message, variant: "destructive" });
+      setSavingIds(m => ({ ...m, [id]: false }));
+      return;
+    }
+    setReservas(list => list.map(r => (r.id === id ? { ...r, estado: next } : r)));
+    setSavingIds(m => ({ ...m, [id]: false }));
+    toast({ title: "Reserva actualizada", description: `Estado: ${next}` });
+  };
+
+  // NUEVO: estado y handlers para confirmación bonita de acciones por lotes
+  const [batchConfirm, setBatchConfirm] = useState<{ open: boolean; type: "accept" | "cancel" | null; eligible: string[]; totalSelected: number }>({ open: false, type: null, eligible: [], totalSelected: 0 });
+
+  const openBatchConfirm = (action: "accept" | "cancel") => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const eligibles = reservas
+      .filter(r => ids.includes(r.id))
+      .filter(r => (action === "accept" ? canAccept(r) : canCancel(r)));
+
+    if (eligibles.length === 0) {
+      toast({ title: "Sin reservas válidas", description: "La selección no tiene reservas en estado compatible.", variant: "destructive" });
+      return;
+    }
+
+    setBatchConfirm({ open: true, type: action, eligible: eligibles.map(r => r.id), totalSelected: ids.length });
+  };
+
+  const batchAction = async (action: "accept" | "cancel", ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    const target: EstadoExacto = action === "accept" ? "PREPARADO" : "CANCELADO";
+
+    const eligibles = reservas.filter(r => ids.includes(r.id)).filter(r => action === "accept" ? canAccept(r) : canCancel(r));
+    if (eligibles.length === 0) {
+      toast({ title: "Sin reservas válidas", description: "La selección no tiene reservas en estado compatible.", variant: "destructive" });
+      return;
+    }
+
+    // Marcar guardado
+    setSavingIds(m => {
+      const next = { ...m };
+      for (const r of eligibles) next[r.id] = true;
+      return next;
+    });
+
+    const updates = await Promise.all(eligibles.map(async r => {
+      const { error } = await supabase.from("reservations").update({ estado: target }).eq("id", r.id);
+      return { id: r.id, error };
+    }));
+
+    const hadErrors = updates.some(u => u.error);
+    if (hadErrors) {
+      const msg = updates.filter(u => u.error).map(u => u.error!.message).slice(0, 3).join(" | ") || "Error parcial";
+      toast({ title: "Errores en el lote", description: msg, variant: "destructive" });
+    }
+
+    const updatedIds = updates.filter(u => !u.error).map(u => u.id);
+    if (updatedIds.length) {
+      setReservas(list => list.map(r => (updatedIds.includes(r.id) ? { ...r, estado: target } : r)));
+    }
+
+    // Desmarcar guardado y limpiar selección aplicada
+    setSavingIds(m => {
+      const next = { ...m };
+      for (const u of updates) next[u.id] = false;
+      return next;
+    });
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      for (const id of updatedIds) next.delete(id);
+      return next;
+    });
+
+    // Cerrar el diálogo de confirmación
+    setBatchConfirm({ open: false, type: null, eligible: [], totalSelected: 0 });
+
+    toast({ title: "Acción por lotes completada", description: `${updatedIds.length} actualizada(s) a ${target}` });
+  };
+
   // filtros
   const [rFrom, setRFrom] = useState<string>("");      // YYYY-MM-DD
   const [rTo, setRTo] = useState<string>("");          // YYYY-MM-DD
@@ -340,6 +450,7 @@ const Admin = () => {
 
     const rows = (resRows as AdminReserva[]) || [];
     setReservas(rows);
+    setSelectedIds(new Set()); // limpiar selección al recargar
 
     // Perfiles de los usuarios implicados
     const userIds = Array.from(new Set(rows.map(r => r.user_id))).filter(Boolean);
@@ -468,7 +579,7 @@ const Admin = () => {
                           {p.imagen_url ? (
                             <img src={p.imagen_url} alt={p.nombre} className="object-cover w-full h-full transform group-hover:scale-105 transition-transform duration-700" />
                           ) : (
-                            <ImageIcon className="w-10 h-10 text-white/50" />
+                            <ImageIcon className="w-10 h-10 text:white/50" />
                           )}
                           <div className="absolute top-3 left-3 flex flex-col gap-2">
                             <Badge className="premium-glass-dark border-0 text-white px-3 py-1 text-[10px]">{p.categoria}</Badge>
@@ -485,7 +596,7 @@ const Admin = () => {
                         <CardContent className="p-4 pt-2 space-y-3">
                           <p className="text-xs text-slate-700 line-clamp-2 min-h-[2.0rem]">{p.descripcion}</p>
                           {/* Stock diario */}
-                          <div className="flex items-center gap-2">
+                          <div className="flex items:center gap-2">
                             <Input
                               type="number"
                               inputMode="numeric"
@@ -529,7 +640,7 @@ const Admin = () => {
                       <CardHeader className="p-4 pb-2 flex flex-col gap-2">
                         <div className="flex items-center justify-between text-sm font-medium text-slate-800"><span className="truncate" title={p.nombre}>{p.nombre}</span><span className="shimmer-title font-bold">{p.precio.toFixed(2)}€</span></div>
                         <div className="flex gap-1 flex-wrap">
-                          <Badge variant="secondary" className="bg-white/50 text-slate-700 text-[10px]">{p.categoria}</Badge>
+                          <Badge variant="secondary" className="bg:white/50 text-slate-700 text-[10px]">{p.categoria}</Badge>
                           {!p.activo && <Badge className="bg-red-500/80 text-white text-[10px]">Inactivo</Badge>}
                         </div>
                       </CardHeader>
@@ -612,6 +723,40 @@ const Admin = () => {
                   <div className="text-xs text-slate-500">Filtrado en servidor (fecha/estado) y cliente (búsqueda)</div>
                 </div>
 
+                {/* NUEVO: barra de acciones por lotes */}
+                <div className="premium-glass rounded-xl p-3 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                  <div className="text-sm text-slate-700">Seleccionadas: <span className="font-semibold">{selectedIds.size}</span></div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => openBatchConfirm("accept")}
+                      disabled={selectedIds.size === 0}
+                      className="min-w-[12rem]"
+                    >
+                      {reservas.some(r => selectedIds.has(r.id) && savingIds[r.id]) ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Check className="w-4 h-4 mr-2" />
+                      )}
+                      Aceptar seleccionadas
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => openBatchConfirm("cancel")}
+                      disabled={selectedIds.size === 0}
+                      className="min-w-[12rem]"
+                    >
+                      {reservas.some(r => selectedIds.has(r.id) && savingIds[r.id]) ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <XCircle className="w-4 h-4 mr-2" />
+                      )}
+                      Cancelar seleccionadas
+                    </Button>
+                    <Button variant="ghost" onClick={clearSelection}>Limpiar selección</Button>
+                  </div>
+                </div>
+
                 {/* Lista filtrada por búsqueda */}
                 {(() => {
                   const term = rSearch.trim().toLowerCase();
@@ -654,10 +799,18 @@ const Admin = () => {
                         const nombre = prof?.nombre || "Usuario";
                         const email = prof?.email || "";
                         const badge = estadoInfo[r.estado] || { label: r.estado, className: "bg-slate-500/80 text-white border-0" };
+                        const isSaving = !!savingIds[r.id];
                         return (
                           <Card key={r.id} className="premium-glass border-0 overflow-hidden hover-float" style={{ opacity: 0, animation: `fade-in 0.6s ease forwards ${idx * 0.04}s` }}>
                             <CardHeader className="p-4 pb-2 flex items-center justify-between">
-                              <CardTitle className="text-base font-semibold text-slate-800">Reserva {r.codigo || r.id.slice(0, 8)}</CardTitle>
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={selectedIds.has(r.id)}
+                                  onCheckedChange={(c) => toggleSelected(r.id, !!c)}
+                                  aria-label="Seleccionar reserva"
+                                />
+                                <CardTitle className="text-base font-semibold text-slate-800">Reserva {r.codigo || r.id.slice(0, 8)}</CardTitle>
+                              </div>
                               <Badge className={badge.className}>{badge.label}</Badge>
                             </CardHeader>
                             <CardContent className="p-4 pt-2 text-sm text-slate-700 space-y-1">
@@ -684,12 +837,72 @@ const Admin = () => {
                                 <span className="font-bold shimmer-title">{(r.total || 0).toFixed(2)}€</span>
                               </div>
                             </CardContent>
+                            <CardFooter className="p-4 pt-0 flex items-center justify-between">
+                              <Button
+                                variant="outline"
+                                className="h-8"
+                                onClick={() => updateReservaEstado(r.id, "CANCELADO")}
+                                disabled={!canCancel(r) || isSaving}
+                              >
+                                {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <XCircle className="w-4 h-4 mr-2" />}
+                                Cancelar
+                              </Button>
+                              <Button
+                                className="h-8"
+                                onClick={() => updateReservaEstado(r.id, "PREPARADO")}
+                                disabled={!canAccept(r) || isSaving}
+                              >
+                                {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+                                Aceptar
+                              </Button>
+                            </CardFooter>
                           </Card>
                         );
                       })}
                     </div>
                   );
                 })()}
+
+                {/* Diálogo de confirmación para acciones por lotes */}
+                <AlertDialog open={batchConfirm.open} onOpenChange={(o) => setBatchConfirm(prev => ({ ...prev, open: o }))}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        {batchConfirm.type === 'cancel' ? 'Cancelar reservas seleccionadas' : 'Aceptar reservas seleccionadas'}
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {batchConfirm.type === 'cancel'
+                          ? 'Esta acción cancelará las reservas elegibles seleccionadas. No podrás revertir esta acción.'
+                          : 'Se marcarán como PREPARADO las reservas elegibles seleccionadas.'}
+                        <br />
+                        <span className="block mt-2 text-slate-700">
+                          Seleccionadas: <strong>{batchConfirm.totalSelected}</strong> · Elegibles: <strong>{batchConfirm.eligible.length}</strong>
+                        </span>
+                        {batchConfirm.eligible.length > 0 && (
+                          <span className="block mt-2 text-xs text-slate-500">
+                            Previsualización: {
+                              reservas
+                                .filter(r => batchConfirm.eligible.includes(r.id))
+                                .slice(0, 5)
+                                .map(r => r.codigo || r.id.slice(0, 8))
+                                .join(', ')
+                            }
+                            {reservas.filter(r => batchConfirm.eligible.includes(r.id)).length > 5 ? '…' : ''}
+                          </span>
+                        )}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Volver</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => batchAction(batchConfirm.type === 'cancel' ? 'cancel' : 'accept', batchConfirm.eligible)}
+                        className={batchConfirm.type === 'cancel' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}
+                      >
+                        {batchConfirm.type === 'cancel' ? 'Confirmar cancelación' : 'Confirmar aceptación'}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
 
                 {reservasError && (
                   <div className="premium-glass rounded-xl p-4 flex items-center gap-2 text-sm text-red-600">
