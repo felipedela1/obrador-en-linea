@@ -58,7 +58,7 @@ const Hero = () => {
       >
         <img 
           src="/hero-obrador.jpg" 
-          alt="Obrador Encinas - Panadería artesanal" 
+          alt="Obrador d'Luis - Panadería artesanal en Andoain" 
           className="w-full h-full object-cover scale-110 opacity-50 saturate-75"
         />
         {/* Capa para deslavar la imagen y hacerla más translúcida */}
@@ -104,7 +104,7 @@ const Hero = () => {
               >
                 <span className="shimmer-title text-blue-50/90">Pan y bollería artesanos,</span>
                 <div className="mt-2">
-                  <span className="shimmer-title text-blue-50/90">cada mañana</span>
+                  <span className="shimmer-title text-blue-50/90">cada mañana en Andoain</span>
                 </div>
               </h1>
               
@@ -116,8 +116,8 @@ const Hero = () => {
                   animation: isLoaded ? 'fade-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards 0.4s' : 'none',
                 }}
               >
-                En el Obrador Encinas horneamos con pasión desde el amanecer. 
-                Fermentaciones lentas, ingredientes naturales, sabor auténtico.
+                En Obrador d'Luis horneamos con pasión desde el amanecer. 
+                Fermentaciones lentas, ingredientes locales vascos, sabor auténtico tradicional.
               </p>
             </div>
             
@@ -172,7 +172,7 @@ const Hero = () => {
                 </div>
                 <div className="parallax-highlight">
                   <div className="text-sm font-semibold text-blue-300">Desde</div>
-                  <div className="text-4xl font-bold shimmer-title text-white">1987</div>
+                  <div className="text-4xl font-bold shimmer-title text-white">1995</div>
                 </div>
               </div>
               
@@ -187,7 +187,7 @@ const Hero = () => {
                     <div>
                       <div className="text-white font-medium mb-1">Horario</div>
                       <div className="text-sm text-blue-200">Lunes - Sábado</div>
-                      <div className="text-sm text-blue-100 font-semibold">7:00 - 14:00</div>
+                      <div className="text-sm text-blue-100 font-semibold">6:30 - 14:00</div>
                     </div>
                   </div>
                   {/* Tarjeta con contraste mejorado */}
@@ -197,8 +197,8 @@ const Hero = () => {
                     </div>
                     <div>
                       <div className="text-white font-medium mb-1">Ubicación</div>
-                      <div className="text-sm text-blue-200">Calle del Pan, 15</div>
-                      <div className="text-sm text-blue-100 font-semibold">Madrid, España</div>
+                      <div className="text-sm text-blue-200">Calle Mayor, 25</div>
+                      <div className="text-sm text-blue-100 font-semibold">Andoain, Gipuzkoa</div>
                     </div>
                   </div>
                 </div>
@@ -223,7 +223,7 @@ const Hero = () => {
             </div>
             <div>
               <div className="text-blue-200 text-sm">Horario de apertura</div>
-              <div className="text-white font-semibold">Lun-Sáb: 7:00 - 14:00</div>
+              <div className="text-white font-semibold">Lun-Sáb: 6:30 - 14:00</div>
             </div>
           </div>
           
@@ -234,7 +234,7 @@ const Hero = () => {
             </div>
             <div>
               <div className="text-blue-200 text-sm">Nuestra ubicación</div>
-              <div className="text-white font-semibold">Calle del Pan, 15 - Madrid</div>
+              <div className="text-white font-semibold">Calle Mayor, 25 - Andoain</div>
             </div>
           </div>
         </div>

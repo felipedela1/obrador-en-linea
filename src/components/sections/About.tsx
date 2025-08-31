@@ -50,7 +50,7 @@ const About = () => {
       const progress = Math.min((timestamp - startTime) / duration, 1)
       
       setCounters({
-        year: Math.floor(progress * 1987),
+        year: Math.floor(progress * 1995),
         creations: Math.floor(progress * 35),
         clients: Math.floor(progress * 1200),
         generations: Math.floor(progress * 3)
@@ -80,8 +80,8 @@ const About = () => {
   const values = [
     {
       icon: <Wheat className="w-8 h-8 text-blue-600" />,
-      title: "Terroir & Origen",
-      description: "Harinas de molinos centenarios seleccionadas por su carácter único y pureza ancestral."
+      title: "Terroir Vasco",
+      description: "Harinas de molinos tradicionales vascos seleccionadas por su carácter único y pureza ancestral."
     },
     {
       icon: <Clock className="w-8 h-8 text-blue-600" />,
@@ -90,13 +90,13 @@ const About = () => {
     },
     {
       icon: <Award className="w-8 h-8 text-blue-600" />,
-      title: "Herencia Viva",
-      description: "Savoir-faire transmitido a través de tres generaciones de maestros panaderos."
+      title: "Herencia Vasca",
+      description: "Savoir-faire transmitido a través de generaciones de maestros panaderos vascos."
     },
     {
       icon: <Heart className="w-8 h-8 text-blue-600" />,
-      title: "Perfección Silenciosa",
-      description: "La maestría reside en los detalles imperceptibles que definen la excelencia."
+      title: "Perfección Tradicional",
+      description: "La maestría reside en los detalles imperceptibles que definen la excelencia del pan vasco."
     }
   ]
 
@@ -104,19 +104,19 @@ const About = () => {
     { 
       number: counters.year, 
       symbol: "",
-      label: "Fundación del atelier", 
+      label: "Fundación del obrador", 
       icon: <Shield className="w-5 h-5 text-blue-600" />
     },
     { 
       number: counters.creations, 
       symbol: "+",
-      label: "Creaciones signature", 
+      label: "Especialidades tradicionales", 
       icon: <Star className="w-5 h-5 text-blue-600" />
     },
     { 
       number: counters.clients, 
       symbol: "+",
-      label: "Connoisseurs asiduos", 
+      label: "Clientes satisfechos", 
       icon: <Heart className="w-5 h-5 text-blue-600" />
     },
     { 
@@ -156,17 +156,17 @@ const About = () => {
         >
           <div className="inline-flex items-center gap-2 px-6 py-2 premium-glass gradient-border rounded-full text-sm font-medium text-slate-800 mb-8">
             <Sparkles className="w-4 h-4 text-blue-600" />
-            <span className="tracking-wider">ARTESANÍA CONTEMPORÁNEA</span>
+            <span className="tracking-wider">ARTESANÍA VASCA CONTEMPORÁNEA</span>
           </div>
           
           <h2 className="text-5xl md:text-6xl lg:text-8xl font-bold mb-6 leading-tight">
-            <span className="shimmer-title">Sobre Nosotros</span>
+            <span className="shimmer-title">Sobre Obrador d'Luis</span>
           </h2>
           
           <div className="h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent max-w-48 mx-auto mb-8" />
           
           <p className="text-xl md:text-2xl text-black max-w-4xl mx-auto leading-relaxed font-light">
-            En el corazón de Madrid, desde 1987, cultivamos el arte de la panadería de autor 
+            En el corazón de Andoain, desde 1995, cultivamos el arte de la panadería tradicional vasca 
             con la precisión y elegancia que caracterizan a la alta gastronomía.
           </p>
         </div>
@@ -216,18 +216,18 @@ const About = () => {
                 <div className="space-y-8">
                   <div>
                     <h3 className="text-3xl md:text-4xl font-bold text-slate-800 mb-6 leading-tight">
-                      Nuestro Santuario Artesanal
+                      Nuestro Santuario Artesanal Vasco
                     </h3>
                     
                     <div className="space-y-6 text-slate-700 leading-relaxed">
                       <p className="text-lg">
-                        En nuestro obrador, cada amanecer es una ceremonia. Las primeras luces del día 
+                        En nuestro obrador de Andoain, cada amanecer es una ceremonia. Las primeras luces del día 
                         iluminan manos expertas que moldean masas que han descansado durante la noche, 
                         desarrollando complejidades aromáticas que solo el tiempo puede otorgar.
                       </p>
                       
                       <p>
-                        Somos custodios de sabores auténticos, donde la innovación nunca compromete 
+                        Somos custodios de sabores auténticos vascos, donde la innovación nunca compromete 
                         la tradición. Nuestras <span className="font-semibold text-blue-800">fermentaciones contemplativas</span> de 
                         hasta 72 horas crean texturas y sabores que trascienden lo ordinario.
                       </p>
@@ -235,7 +235,7 @@ const About = () => {
                       <p>
                         Cada pan que sale de nuestros hornos de piedra lleva consigo décadas de 
                         perfeccionamiento, el <span className="font-semibold text-blue-800">terroir</span> de nuestros ingredientes 
-                        selectos y la pasión de quienes comprenden que la panadería es un arte 
+                        locales vascos y la pasión de quienes comprenden que la panadería es un arte 
                         que se vive, no solo se practica.
                       </p>
                     </div>
@@ -247,9 +247,9 @@ const About = () => {
                         <ChefHat className="w-6 h-6 text-black" />
                       </div>
                       <div>
-                        <p className="font-medium mb-1 text-black">Maestro Panadero</p>
+                        <p className="font-medium mb-1 text-black">Maestro Panadero Vasco</p>
                         <p className="text-sm text-slate-300 italic text-black">
-                          "Cada pan cuenta una historia de tiempo, paciencia y respeto por los ingredientes."
+                          "Cada pan cuenta una historia de tiempo, paciencia y respeto por los ingredientes de Euskal Herria."
                         </p>
                       </div>
                     </div>

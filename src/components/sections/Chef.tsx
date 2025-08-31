@@ -74,9 +74,9 @@ const Chef = () => {
   }, [])
 
   const achievements = [
-    { icon: <Award className="w-5 h-5 text-blue-600" />, title: "Mejor Pan de Madrid", subtitle: "Reconocimiento 2019" },
-    { icon: <Users className="w-5 h-5 text-blue-600" />, title: "Mentor de 15+", subtitle: "Nuevos panaderos" },
-    { icon: <Sparkles className="w-5 h-5 text-blue-600" />, title: "Formación en París", subtitle: "École de Boulangerie" }
+    { icon: <Award className="w-5 h-5 text-blue-600" />, title: "Mejor Panadero de Gipuzkoa", subtitle: "Premio 2022" },
+    { icon: <Users className="w-5 h-5 text-blue-600" />, title: "Formador de Jóvenes", subtitle: "Programa de aprendizaje" },
+    { icon: <Sparkles className="w-5 h-5 text-blue-600" />, title: "Especialista en Masa Madre", subtitle: "Técnicas tradicionales vascas" }
   ]
 
   return (
@@ -189,7 +189,7 @@ const Chef = () => {
                 <div className="relative">
                   <Quote className="w-10 h-10 text-blue-400 mb-4" />
                   <blockquote className="text-lg text-slate-700 italic leading-relaxed mb-6 font-light">
-                    "El pan no es solo alimento; es cultura, tradición y conexión. Cada hogaza cuenta una historia de tiempo, paciencia y respeto por los ingredientes."
+                    "El pan no es solo alimento; es cultura vasca, tradición centenaria y conexión con nuestra tierra. Cada hogaza cuenta una historia de tiempo, paciencia y respeto por los ingredientes locales."
                   </blockquote>
                   <cite className="text-sm font-semibold text-slate-800 not-italic">
                     — Luis Encinas, Maestro Panadero
@@ -204,10 +204,13 @@ const Chef = () => {
               style={{animation: isVisible ? 'fade-in 0.6s ease forwards 0.6s' : 'none'}}
             >
               <p>
-                Luis comenzó su viaje a los 16 años, aprendiendo el oficio junto a su padre. Tras formarse en las mejores <span className="font-semibold text-blue-600">boulangeries</span> de <span className="font-semibold text-blue-600">Francia</span> y perfeccionar las técnicas de masa madre, regresó para redefinir el pan artesanal en Madrid.
+                Luis Encinas nació y creció en Andoain, donde desde niño aprendió el oficio junto a su padre. 
+                Tras perfeccionar las técnicas tradicionales vascas y formarse en las mejores escuelas de panadería 
+                de España, regresó a su tierra para preservar y evolucionar el legado del pan artesano vasco.
               </p>
               <p>
-                Su filosofía se basa en el respeto absoluto por los tiempos naturales, el uso de harinas ecológicas y la innovación constante dentro de la tradición.
+                Su filosofía se basa en el respeto absoluto por los tiempos naturales, el uso de harinas ecológicas 
+                locales y la innovación constante dentro de la tradición centenaria del pan vasco.
               </p>
             </div>
 

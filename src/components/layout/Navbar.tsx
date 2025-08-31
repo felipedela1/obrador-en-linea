@@ -244,11 +244,6 @@ const Navbar = () => {
 
             {/* Right side */}
             <div className="hidden md:flex items-center space-x-6">
-              {/* Horarios con efecto premium */}
-              <div className="flex items-center text-sm text-slate-700 premium-glass px-4 py-2 rounded-full shadow-xl">
-                <Clock className="w-4 h-4 mr-2 text-blue-600" />
-                <span className="font-medium">Abierto hasta 14:00</span>
-              </div>
 
               {/* Estado de autenticación con control de timeout y reintento */}
               {isLogged && authLoading ? (

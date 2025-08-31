@@ -77,12 +77,12 @@ const Footer = () => {
                 </div>
               </div>
               <div className="leading-tight">
-                <h3 className="text-2xl font-bold tracking-tight">Obrador Encinas</h3>
+                <h3 className="text-2xl font-bold tracking-tight">Obrador d'Luis</h3>
                 <p className="shimmer-title text-[11px] tracking-[0.45em] font-semibold mt-1">A R T E S A N A L</p>
               </div>
             </div>
             <p className="text-sm/6 text-slate-300 max-w-xs">
-              Pan y bollería artesanos desde 1987. Tradición, calidad y devoción
+              Pan y bollería artesanos desde 1995. Tradición vasca, calidad y devoción
               diaria en cada fermentación lenta y cada horneado.
             </p>
             <div className="flex gap-3">
@@ -102,7 +102,7 @@ const Footer = () => {
               ))}
             </div>
             <Badge variant="secondary" className="premium-glass-dark border-0 px-4 py-1.5 text-[11px] tracking-wide font-medium">
-              Abierto desde las 7:00
+              Abierto desde las 6:30
             </Badge>
           </div>
 
@@ -137,23 +137,23 @@ const Footer = () => {
               <div className="flex items-start gap-3">
                 <MapPin className="w-4 h-4 text-blue-400 mt-0.5" />
                 <div className="text-slate-300">
-                  <div>Calle del Pan, 15</div>
-                  <div>28012 Madrid, España</div>
+                  <div>Calle Mayor, 25</div>
+                  <div>20140 Andoain, Gipuzkoa</div>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <Phone className="w-4 h-4 text-blue-400" />
-                <div className="text-slate-300">915 123 456</div>
+                <div className="text-slate-300">943 123 456</div>
               </div>
               <div className="flex items-center gap-3">
                 <Mail className="w-4 h-4 text-blue-400" />
-                <div className="text-slate-300">hola@obradorencinas.com</div>
+                <div className="text-slate-300">info@obradordluis.com</div>
               </div>
               <div className="flex items-start gap-3">
                 <Clock className="w-4 h-4 text-blue-400 mt-0.5" />
                 <div className="text-slate-300">
-                  <div>Lun-Sáb: 7:00 - 14:00</div>
-                  <div>Dom: 8:00 - 13:00</div>
+                  <div>Lun-Sáb: 6:30 - 14:00</div>
+                  <div>Dom: 7:30 - 13:30</div>
                 </div>
               </div>
             </div>
@@ -166,7 +166,7 @@ const Footer = () => {
               <span className="absolute -bottom-1 left-0 w-10 h-px bg-gradient-to-r from-blue-400 to-indigo-500" />
             </h4>
             <p className="text-sm text-slate-400 leading-relaxed">
-              Recibe novedades, promociones y el oficio detrás de nuestras masas.
+              Recibe novedades, promociones y descubre el arte del pan artesano vasco.
             </p>
             <form
               className="space-y-3"
@@ -201,7 +201,7 @@ const Footer = () => {
         {/* Bottom */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-6 text-xs text-slate-400">
           <div className="flex items-center gap-2">
-            <span>© {year} Obrador Encinas.</span>
+            <span>© {year} Obrador d'Luis.</span>
             <span className="text-slate-500">Todos los derechos reservados.</span>
           </div>
           <div className="flex flex-wrap gap-6">
