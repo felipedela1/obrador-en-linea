@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Loader2, RefreshCw, Calendar, Clock, Package, Check, AlertCircle, Sparkles, ShoppingCart } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale/es"
+import { Helmet } from 'react-helmet-async'
 
 interface ReservationItem {
   id: string
@@ -143,6 +144,28 @@ const MisReservas = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <Helmet>
+        <title>Mis Reservas - Estado de Pedidos Obrador d'Luis | Andoain</title>
+        <meta name="description" content="Revisa el estado de tus reservas de productos artesanales en Obrador d'Luis. Gestiona pedidos pendientes, preparados y entregados online desde Andoain." />
+        <meta name="keywords" content="mis reservas panadería, estado pedidos Obrador d'Luis, reservas online Andoain, gestionar pedidos artesanales" />
+        <meta name="robots" content="index, follow" />
+        <meta name="author" content="Obrador d'Luis" />
+        <meta name="language" content="es-ES" />
+        
+        {/* Open Graph */}
+        <meta property="og:title" content="Mis Reservas - Obrador d'Luis" />
+        <meta property="og:description" content="Gestiona tus reservas de productos artesanales vascos online." />
+        <meta property="og:url" content="https://tu-dominio.com/misreservas" />
+        <meta property="og:type" content="website" />
+        
+        {/* Twitter Cards */}
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="Mis Reservas - Obrador d'Luis" />
+        <meta name="twitter:description" content="Revisa y gestiona tus pedidos de pan artesanal vasco." />
+        
+        {/* Canonical URL */}
+        <link rel="canonical" href="https://tu-dominio.com/misreservas" />
+      </Helmet>
       <Navbar />
       <main className="flex-1 pt-0 pb-28">
         {/* HERO HEADER */}

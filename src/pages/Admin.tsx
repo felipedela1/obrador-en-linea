@@ -28,6 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Helmet } from 'react-helmet-async';
 
 // Simple perf log (dev only)
 const logPerf = (label: string, info: Record<string, any>) => {
@@ -474,6 +475,13 @@ const Admin = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <Helmet>
+        <title>Panel de Administración - Obrador d'Luis</title>
+        <meta name="description" content="Panel de control para gestión de productos, stock y reservas de la panadería artesanal vasca." />
+        <meta name="robots" content="noindex, nofollow" />
+        <meta name="author" content="Obrador d'Luis" />
+        <meta name="language" content="es-ES" />
+      </Helmet>
       <Navbar />
       <main className="flex-1 pt-0 pb-28">
         {/* HERO HEADER */}

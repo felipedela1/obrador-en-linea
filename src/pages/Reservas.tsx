@@ -12,6 +12,7 @@ import { Calendar as CalendarIcon, Loader2, Minus, Plus, RefreshCw, ShoppingCart
 import VanillaTilt from 'vanilla-tilt';
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { Helmet } from 'react-helmet-async';
 
 // Tipos
 interface AvailableProduct { product_id: string; nombre: string; slug: string; precio: number; categoria: string; imagen_url: string | null; cantidad_disponible: number; reservado: number; }
@@ -196,6 +197,81 @@ const Reservas = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <Helmet>
+        <title>Reservar Pan Artesanal en Obrador d'Luis - Andoain | Panadería Tradicional Vasca</title>
+        <meta name="description" content="Reserva pan artesanal, masa madre y productos tradicionales vascos en Obrador d'Luis, Andoain. Horarios de recogida, stock disponible y confirmación instantánea. ¡Descubre el sabor auténtico de Gipuzkoa!" />
+        <meta name="keywords" content="reservar pan artesanal, panadería Andoain, Obrador d'Luis, masa madre vasca, pan tradicional Gipuzkoa, reserva online panadería, productos artesanales Andoain" />
+        <meta name="robots" content="index, follow" />
+        <meta name="author" content="Obrador d'Luis" />
+        <meta name="language" content="es-ES" />
+        <meta name="geo.region" content="ES-SS" />
+        <meta name="geo.placename" content="Andoain" />
+        <meta name="geo.position" content="43.2194;-2.0178" />
+        <meta name="ICBM" content="43.2194, -2.0178" />
+        
+        {/* Open Graph para Facebook/LinkedIn */}
+        <meta property="og:title" content="Reservar Pan Artesanal en Obrador d'Luis - Andoain" />
+        <meta property="og:description" content="Reserva productos artesanales vascos en la panadería tradicional de Andoain. Masa madre, pan de pueblo y más." />
+        <meta property="og:image" content="https://tu-dominio.com/images/obrador-dluis-og.jpg" />
+        <meta property="og:url" content="https://tu-dominio.com/reservas" />
+        <meta property="og:type" content="website" />
+        <meta property="og:locale" content="es_ES" />
+        
+        {/* Twitter Cards */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Reservar Pan Artesanal en Obrador d'Luis - Andoain" />
+        <meta name="twitter:description" content="Descubre el pan artesanal vasco en Obrador d'Luis. Reserva online y recoge en Andoain." />
+        <meta name="twitter:image" content="https://tu-dominio.com/images/obrador-dluis-twitter.jpg" />
+        
+        {/* Canonical URL */}
+        <link rel="canonical" href="https://tu-dominio.com/reservas" />
+        
+        {/* Structured Data JSON-LD */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Bakery",
+            "name": "Obrador d'Luis",
+            "description": "Panadería artesanal vasca especializada en masa madre y productos tradicionales de Gipuzkoa",
+            "url": "https://tu-dominio.com",
+            "telephone": "+34-943-123-456",
+            "email": "info@obradordluis.com",
+            "address": {
+              "@type": "PostalAddress",
+              "streetAddress": "Calle Mayor, 25",
+              "addressLocality": "Andoain",
+              "addressRegion": "Gipuzkoa",
+              "postalCode": "20140",
+              "addressCountry": "ES"
+            },
+            "geo": {
+              "@type": "GeoCoordinates",
+              "latitude": "43.2194",
+              "longitude": "-2.0178"
+            },
+            "openingHours": [
+              "Mo-Sa 06:30-14:00",
+              "Su 07:30-13:30"
+            ],
+            "priceRange": "€€",
+            "servesCuisine": "Vasca",
+            "hasOfferCatalog": {
+              "@type": "OfferCatalog",
+              "name": "Productos Artesanales",
+              "itemListElement": [
+                {
+                  "@type": "Offer",
+                  "itemOffered": {
+                    "@type": "Product",
+                    "name": "Pan de Masa Madre",
+                    "description": "Pan artesanal fermentado naturalmente"
+                  }
+                }
+              ]
+            }
+          })}
+        </script>
+      </Helmet>
       <Navbar />
       <main className="flex-1 pt-0 pb-16"> {/* Compactar espaciado superior/inferior */}
         {/* Header al estilo de otras pantallas (hero grande) */}

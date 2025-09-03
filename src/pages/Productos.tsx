@@ -10,6 +10,7 @@ import { useEffect, useState, useCallback, useRef } from "react"
 import { supabase } from "@/integrations/supabase/client"
 import type { ProductRow } from "@/types/models"
 import { default as VanillaTilt } from 'vanilla-tilt'
+import { Helmet } from 'react-helmet-async'
 
 interface ProductWithStock {
   id: string
@@ -151,6 +152,45 @@ const Productos = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <Helmet>
+        <title>Productos Artesanales Obrador d'Luis - Pan y Masa Madre Vasca | Andoain</title>
+        <meta name="description" content="Descubre nuestros productos artesanales: pan de masa madre, pan de pueblo, croissants y más. Reserva online productos frescos de la panadería tradicional vasca en Andoain." />
+        <meta name="keywords" content="productos panadería artesanal Andoain, masa madre vasca, pan tradicional Gipuzkoa, productos Obrador d'Luis, reserva online productos frescos" />
+        <meta name="robots" content="index, follow" />
+        <meta name="author" content="Obrador d'Luis" />
+        <meta name="language" content="es-ES" />
+        <meta name="geo.region" content="ES-SS" />
+        <meta name="geo.placename" content="Andoain" />
+        <meta name="geo.position" content="43.2194;-2.0178" />
+        <meta name="ICBM" content="43.2194, -2.0178" />
+        
+        {/* Open Graph */}
+        <meta property="og:title" content="Productos Artesanales Obrador d'Luis - Andoain" />
+        <meta property="og:description" content="Productos frescos y artesanales vascos: pan de masa madre, pan de pueblo y más. Reserva online." />
+        <meta property="og:image" content="https://tu-dominio.com/images/productos-obrador-dluis-og.jpg" />
+        <meta property="og:url" content="https://tu-dominio.com/productos" />
+        <meta property="og:type" content="website" />
+        
+        {/* Twitter Cards */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Productos Artesanales Obrador d'Luis - Andoain" />
+        <meta name="twitter:description" content="Descubre productos artesanales vascos en Obrador d'Luis. Reserva online pan fresco." />
+        <meta name="twitter:image" content="https://tu-dominio.com/images/productos-obrador-dluis-twitter.jpg" />
+        
+        {/* Canonical URL */}
+        <link rel="canonical" href="https://tu-dominio.com/productos" />
+        
+        {/* Structured Data */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "name": "Productos Artesanales Obrador d'Luis",
+            "description": "Catálogo de productos frescos y artesanales vascos",
+            "url": "https://tu-dominio.com/productos"
+          })}
+        </script>
+      </Helmet>
       <Navbar />
       <main className="flex-1 pt-0 pb-24">
         {/* Header Premium */}
