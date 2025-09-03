@@ -11,6 +11,7 @@ import { Loader2, RefreshCw, Calendar, Clock, Package, Check, AlertCircle, Spark
 import { format } from "date-fns"
 import { es } from "date-fns/locale/es"
 import { Helmet } from 'react-helmet-async'
+import { useAuth } from "@/contexts/AuthContext"
 
 interface ReservationItem {
   id: string
@@ -73,6 +74,8 @@ const ReservationSkeleton = ({ index }: { index: number }) => (
 
 const MisReservas = () => {
   const { toast } = useToast()
+  // Verificar autenticación
+  const { isLogged, authLoading, user } = useAuth()
 
   const [loading, setLoading] = useState(true)
   const [reservas, setReservas] = useState<Reservation[]>([])
@@ -141,6 +144,25 @@ const MisReservas = () => {
 
   const totalReservas = reservas.length
   const activas = reservas.filter(r => ["PENDIENTE", "PREPARADO"].includes(r.estado)).length
+
+  // Mostrar loading mientras se autentica automáticamente
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-xl">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Iniciando sesión automáticamente...</h2>
+            <p className="text-gray-600">Por favor espera mientras te conectamos con tu cuenta.</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">

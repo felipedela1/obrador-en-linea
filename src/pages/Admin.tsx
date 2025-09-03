@@ -29,6 +29,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Helmet } from 'react-helmet-async';
+import { useAuth } from "@/contexts/AuthContext";
 
 // Simple perf log (dev only)
 const logPerf = (label: string, info: Record<string, any>) => {
@@ -78,6 +79,8 @@ const emptyProduct: Partial<ProductRow> = {
 
 const Admin = () => {
   const { toast } = useToast();
+  // Verificar autenticación y permisos de admin
+  const { isLogged, authLoading, user, profileRole } = useAuth();
 
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -472,6 +475,61 @@ const Admin = () => {
 
   useEffect(() => { fetchReservas(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
   // --- FIN NUEVO ---
+
+  // Verificar autenticación y permisos de admin
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-xl">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Iniciando sesión automáticamente...</h2>
+            <p className="text-gray-600">Por favor espera mientras te conectamos con tu cuenta.</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!isLogged) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-red-600 to-red-600 flex items-center justify-center text-white shadow-xl">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Acceso denegado</h2>
+            <p className="text-gray-600">Debes estar autenticado para acceder al panel de administración.</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (profileRole !== 'admin') {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-red-600 to-red-600 flex items-center justify-center text-white shadow-xl">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Acceso restringido</h2>
+            <p className="text-gray-600">Solo los administradores pueden acceder a esta página.</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -923,6 +981,156 @@ const Admin = () => {
           </div>
         </section>
       </main>
+
+      {/* Modal de edición/creación de producto */}
+      <Dialog open={edit.open} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{edit.mode === "create" ? "Crear producto" : "Editar producto"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="nombre">Nombre *</Label>
+                <Input
+                  id="nombre"
+                  value={edit.product?.nombre || ""}
+                  onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, nombre: e.target.value } }))}
+                  placeholder="Nombre del producto"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="slug">Slug *</Label>
+                <Input
+                  id="slug"
+                  value={edit.product?.slug || ""}
+                  onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, slug: e.target.value } }))}
+                  placeholder="slug-del-producto"
+                  disabled={edit.mode === "create" && slugAuto}
+                />
+                {edit.mode === "create" && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="slugAuto"
+                      checked={slugAuto}
+                      onChange={e => setSlugAuto(e.target.checked)}
+                    />
+                    <Label htmlFor="slugAuto" className="text-xs">Generar automáticamente</Label>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="descripcion">Descripción</Label>
+              <Textarea
+                id="descripcion"
+                value={edit.product?.descripcion || ""}
+                onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, descripcion: e.target.value } }))}
+                placeholder="Descripción del producto"
+                rows={3}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="precio">Precio (€) *</Label>
+                <Input
+                  id="precio"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={edit.product?.precio || ""}
+                  onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, precio: parseFloat(e.target.value) || 0 } }))}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="categoria">Categoría</Label>
+                <select
+                  id="categoria"
+                  value={edit.product?.categoria || "PANES"}
+                  onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, categoria: e.target.value as ProductCategory } }))}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="PANES">Panes</option>
+                  <option value="BOLLERIA">Bollería</option>
+                  <option value="TARTAS">Tartas</option>
+                  <option value="ESPECIALES">Especiales</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="etiquetas">Etiquetas (separadas por coma)</Label>
+              <Input
+                id="etiquetas"
+                value={edit.product?.etiquetas?.join(", ") || ""}
+                onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, etiquetas: e.target.value.split(",").map(s => s.trim()).filter(s => s) } }))}
+                placeholder="artesanal, masa madre, tradicional"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="imagen">Imagen</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="imagen"
+                  value={edit.product?.imagen_url || ""}
+                  onChange={e => setEdit(ed => ({ ...ed, product: { ...ed.product!, imagen_url: e.target.value } }))}
+                  placeholder="/imagen.jpg"
+                />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  disabled={uploading}
+                  className="hidden"
+                  id="file-upload"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => document.getElementById("file-upload")?.click()}
+                  disabled={uploading}
+                >
+                  {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="activo"
+                  checked={edit.product?.activo || false}
+                  onCheckedChange={checked => setEdit(ed => ({ ...ed, product: { ...ed.product!, activo: checked } }))}
+                />
+                <Label htmlFor="activo">Activo</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="destacado"
+                  checked={edit.product?.destacado || false}
+                  onCheckedChange={checked => setEdit(ed => ({ ...ed, product: { ...ed.product!, destacado: checked } }))}
+                />
+                <Label htmlFor="destacado">Destacado</Label>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-6">
+            <Button variant="outline" onClick={closeDialog}>
+              Cancelar
+            </Button>
+            <Button onClick={saveProduct}>
+              {edit.mode === "create" ? "Crear" : "Guardar"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Footer />
     </div>
   );

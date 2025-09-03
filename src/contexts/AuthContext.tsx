@@ -55,7 +55,61 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
        null)
     : null;
 
-  const retryAuth = () => { setAuthWarning(null); setAuthLoading(true); setAuthReload(c => c + 1); };
+  const retryAuth = () => { 
+    setAuthWarning(null); 
+    setAuthLoading(true); 
+    setAuthReload(c => c + 1); 
+  };
+
+  // Función de auto-login para pruebas
+  const autoLogin = async () => {
+    try {
+      console.log('[AUTO-LOGIN] Intentando login con felipedelacruzgoon@gmail.com');
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: 'felipedelacruzgoon@gmail.com',
+        password: 'Qwertyu'
+      });
+      if (error) {
+        console.log('[AUTO-LOGIN] Login falló:', error.message);
+        // Si el error indica que el usuario no existe o credenciales inválidas, intentar registro
+        if (error.message.includes('Invalid login credentials') || error.message.includes('Email not confirmed') || error.message.includes('User not found')) {
+          console.log('[AUTO-LOGIN] Intentando registro...');
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email: 'felipedelacruzgoon@gmail.com',
+            password: 'Qwertyu',
+            options: {
+              data: {
+                nombre: 'Felipe'
+              }
+            }
+          });
+          if (signUpError) {
+            console.log('[AUTO-LOGIN] Registro falló:', signUpError.message);
+            return false;
+          }
+          console.log('[AUTO-LOGIN] Registro exitoso, esperando confirmación...');
+          // Después del registro, intentar login nuevamente
+          await delay(2000); // Esperar un poco para que se procese
+          const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+            email: 'felipedelacruzgoon@gmail.com',
+            password: 'Qwertyu'
+          });
+          if (loginError) {
+            console.log('[AUTO-LOGIN] Login después de registro falló:', loginError.message);
+            return false;
+          }
+          console.log('[AUTO-LOGIN] Login exitoso después de registro');
+          return true;
+        }
+        return false;
+      }
+      console.log('[AUTO-LOGIN] Login exitoso para Felipe');
+      return true;
+    } catch (err) {
+      console.log('[AUTO-LOGIN] Error en auto-login:', err);
+      return false;
+    }
+  };
 
   // Utilidades de timeout no bloqueantes
   const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -89,10 +143,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
 
     if (data) {
+      const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || "admin@obradorencinas.com").toLowerCase();
+      const inferredRole: UserRole = (userEmail && userEmail.toLowerCase() === ADMIN_EMAIL) ? "admin" : "customer";
+      
       const needsUpdate =
         (userEmail && data.email !== userEmail) ||
         (!!metaTel && !data.telefono) ||
-        (!!metaDir && !data.direccion_entrega);
+        (!!metaDir && !data.direccion_entrega) ||
+        (data.role !== inferredRole);
 
       if (needsUpdate) {
         await supabase
@@ -101,11 +159,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             email: userEmail ?? data.email ?? null,
             telefono: data.telefono || metaTel || null,
             direccion_entrega: data.direccion_entrega || metaDir || null,
+            role: inferredRole,
           })
           .eq("user_id", u.id);
       }
 
-      setProfileRole((data.role as UserRole) || null);
+      setProfileRole((data.role as UserRole) || inferredRole);
       setProfileName(data.nombre || null);
       return;
     }
@@ -179,11 +238,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         if (!mounted) return;
         setAuthLoading(false);
       } else {
-        setSession(null);
-        setProfileRole(null);
-        setProfileName(null);
-        setEmailVerified(null);
-        setAuthLoading(false);
+        // Intentar auto-login siempre si no hay sesión
+        console.log('[INIT] No hay sesión activa, intentando auto-login...');
+        const autoLoginSuccess = await autoLogin();
+        if (!autoLoginSuccess) {
+          console.log('[INIT] Auto-login falló, permaneciendo sin sesión');
+          setSession(null);
+          setProfileRole(null);
+          setProfileName(null);
+          setEmailVerified(null);
+          setAuthLoading(false);
+        }
+        // Si el auto-login fue exitoso, el onAuthStateChange se encargará de actualizar la sesión
       }
     };
 

@@ -20,6 +20,7 @@ import UpdatePassword from "./pages/UpdatePassword";
 import Debug from "./pages/Debug";
 import { supabase } from "@/integrations/supabase/client";
 import { checkEnvironment } from "@/lib/utils";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 // NUEVO: Componente para restaurar scroll al top en cada cambio de ruta
 const ScrollToTop = () => {
@@ -43,50 +44,51 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <HelmetProvider>
-          <Helmet>
-            <title>Obrador d'Luis - Panadería Artesanal Vasca en Andoain</title>
-            <meta name="description" content="Descubre el auténtico pan artesanal vasco en Obrador d'Luis, Andoain. Reserva masa madre, pan de pueblo y productos tradicionales online. ¡Sabor de Gipuzkoa!" />
-            <meta name="keywords" content="panadería artesanal Andoain, masa madre vasca, pan tradicional Gipuzkoa, reserva online panadería, productos artesanales Andoain, Obrador d'Luis" />
-            <meta name="robots" content="index, follow" />
-            <meta name="author" content="Obrador d'Luis" />
-            <meta name="language" content="es-ES" />
-            <meta name="geo.region" content="ES-SS" />
-            <meta name="geo.placename" content="Andoain" />
-            <meta name="geo.position" content="43.2194;-2.0178" />
-            <meta name="ICBM" content="43.2194, -2.0178" />
-            <link rel="canonical" href="https://tu-dominio.com" />
-            
-            {/* Open Graph */}
-            <meta property="og:title" content="Obrador d'Luis - Panadería Artesanal Vasca en Andoain" />
-            <meta property="og:description" content="Pan artesanal vasco con masa madre. Reserva online y recoge en Andoain." />
-            <meta property="og:image" content="https://tu-dominio.com/images/obrador-dluis-og.jpg" />
-            <meta property="og:url" content="https://tu-dominio.com" />
-            <meta property="og:type" content="website" />
-            
-            {/* Twitter Cards */}
-            <meta name="twitter:card" content="summary_large_image" />
-            <meta name="twitter:title" content="Obrador d'Luis - Panadería Artesanal Vasca en Andoain" />
-            <meta name="twitter:description" content="Descubre el pan artesanal vasco en Obrador d'Luis. Reserva online." />
-            <meta name="twitter:image" content="https://tu-dominio.com/images/obrador-dluis-twitter.jpg" />
-            
-            {/* Favicon */}
-            <link rel="icon" href="/favicon.ico" />
-            <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-            
-            {/* Fonts preload */}
-            <link rel="preconnect" href="https://fonts.googleapis.com" />
-            <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-          </Helmet>
-          <BrowserRouter>
-            <ScrollToTop />
-            <AppInner />
-            <Sonner />
-            <Toaster />
-          </BrowserRouter>
-        </HelmetProvider>
-      </TooltipProvider>
+      <AuthProvider>
+        <TooltipProvider>
+          <HelmetProvider>
+            <Helmet>
+              <title>Obrador d'Luis - Panadería Artesanal Vasca en Andoain</title>
+              <meta name="description" content="Descubre el auténtico pan artesanal vasco en Obrador d'Luis, Andoain. Reserva masa madre, pan de pueblo y productos tradicionales online. ¡Sabor de Gipuzkoa!" />
+              <meta name="keywords" content="panadería artesanal Andoain, masa madre vasca, pan tradicional Gipuzkoa, reserva online panadería, productos artesanales Andoain, Obrador d'Luis" />
+              <meta name="robots" content="index, follow" />
+              <meta name="author" content="Obrador d'Luis" />
+              <meta name="language" content="es-ES" />
+              <meta name="geo.region" content="ES-SS" />
+              <meta name="geo.placename" content="Andoain" />
+              <meta name="geo.position" content="43.2194;-2.0178" />
+              <meta name="ICBM" content="43.2194, -2.0178" />
+              <link rel="canonical" href="https://tu-dominio.com" />
+              
+              {/* Open Graph */}
+              <meta property="og:title" content="Obrador d'Luis - Panadería Artesanal Vasca en Andoain" />
+              <meta property="og:description" content="Pan artesanal vasco con masa madre. Reserva online y recoge en Andoain." />
+              <meta property="og:image" content="https://tu-dominio.com/images/obrador-dluis-og.jpg" />
+              <meta property="og:url" content="https://tu-dominio.com" />
+              <meta property="og:type" content="website" />
+              
+              {/* Twitter Cards */}
+              <meta name="twitter:card" content="summary_large_image" />
+              <meta name="twitter:title" content="Obrador d'Luis - Panadería Artesanal Vasca en Andoain" />
+              <meta name="twitter:description" content="Descubre el pan artesanal vasco en Obrador d'Luis. Reserva online." />
+              <meta name="twitter:image" content="https://tu-dominio.com/images/obrador-dluis-twitter.jpg" />
+              
+              {/* Favicon */}
+              <link rel="icon" href="/favicon.jpg" />
+              
+              {/* Fonts preload */}
+              <link rel="preconnect" href="https://fonts.googleapis.com" />
+              <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+            </Helmet>
+            <BrowserRouter>
+              <ScrollToTop />
+              <AppInner />
+              <Sonner />
+              <Toaster />
+            </BrowserRouter>
+          </HelmetProvider>
+        </TooltipProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

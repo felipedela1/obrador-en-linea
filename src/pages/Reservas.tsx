@@ -13,6 +13,7 @@ import VanillaTilt from 'vanilla-tilt';
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Helmet } from 'react-helmet-async';
+import { useAuth } from "@/contexts/AuthContext";
 
 // Tipos
 interface AvailableProduct { product_id: string; nombre: string; slug: string; precio: number; categoria: string; imagen_url: string | null; cantidad_disponible: number; reservado: number; }
@@ -43,6 +44,8 @@ const Reservas = () => {
   const { toast } = useToast();
   // Añadir navegación para "Mis Reservas"
   const navigate = useNavigate();
+  // Verificar autenticación
+  const { isLogged, authLoading, user } = useAuth();
 
   // Utilidades de fecha local
   const getLocalDateStr = (d: Date) => {
@@ -194,6 +197,25 @@ const Reservas = () => {
 
   const filtered = products.filter(p => p.nombre.toLowerCase().includes(filter.toLowerCase()));
   const cartCount = Object.values(cart).reduce((acc, it) => acc + it.qty, 0);
+
+  // Mostrar loading mientras se autentica automáticamente
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-xl">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Iniciando sesión automáticamente...</h2>
+            <p className="text-gray-600">Por favor espera mientras te conectamos con tu cuenta.</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">

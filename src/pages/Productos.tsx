@@ -5,12 +5,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { HeroButton } from "@/components/ui/hero-button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Filter, Star, Leaf, Sparkles, Loader2, Package, Wheat } from "lucide-react"
+import { Search, Filter, Star, Leaf, Sparkles, Loader2, Package, Wheat, Edit } from "lucide-react"
 import { useEffect, useState, useCallback, useRef } from "react"
 import { supabase } from "@/integrations/supabase/client"
 import type { ProductRow } from "@/types/models"
 import { default as VanillaTilt } from 'vanilla-tilt'
 import { Helmet } from 'react-helmet-async'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface ProductWithStock {
   id: string
@@ -58,6 +59,8 @@ const Productos = () => {
   const [categoryFilter, setCategoryFilter] = useState("all")
   const tiltRefs = useRef<(TiltElement | null)[]>([])
   const headerRef = useRef<HTMLDivElement | null>(null)
+
+  const { user } = useAuth()
 
   const load = useCallback(async () => {
     console.log("[Productos] Iniciando carga de productos...")
