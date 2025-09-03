@@ -219,6 +219,15 @@ const Navbar = () => {
               </Button>
             </div>
           )}
+
+          {/* NUEVO: Banner de error de autenticación visible en móvil/desktop */}
+          {authWarning && !isLogged && (
+            <div className="flex items-center gap-3 premium-glass px-4 py-3 mt-3 mb-3 rounded-xl shadow-xl text-sm text-slate-800 border border-amber-200" role="alert" aria-live="assertive">
+              <AlertCircle className="w-4 h-4 text-amber-600" />
+              <span className="flex-1 truncate">{authWarning}</span>
+              <Button size="sm" variant="ghost" className="h-8 px-3 text-blue-600 hover:text-blue-700" onClick={retryAuth}>Reintentar</Button>
+            </div>
+          )}
           
           <div className="flex items-center justify-between h-20">
             {/* Logo con efecto premium */}
@@ -354,10 +363,19 @@ const Navbar = () => {
                         variant="secondary"
                         onClick={handleResendVerification} 
                         disabled={resending || isSigningOut} 
-                        className="w-full bg-white/20 hover:bg-white/30 text-white border-white/30 font-medium"
+                        className="w-full bg-white/20 hover:bg-white/30 text:white border-white/30 font-medium"
                       >
                         {resending ? "Enviando..." : resent ? "✓ Enviado" : "Reenviar verificación"}
                       </Button>
+                    </div>
+                  )}
+
+                  {/* Banner de error auth en el panel móvil */}
+                  {authWarning && !isLogged && (
+                    <div className="mb-6 p-3 premium-glass rounded-xl text-sm text-slate-800 border border-amber-200 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600" />
+                      <span className="flex-1 truncate">{authWarning}</span>
+                      <Button size="sm" variant="ghost" className="h-8 px-3 text-blue-600 hover:text-blue-700" onClick={retryAuth}>Reintentar</Button>
                     </div>
                   )}
 

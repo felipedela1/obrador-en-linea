@@ -61,60 +61,98 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setAuthReload(c => c + 1); 
   };
 
+  // Utilidades de timeout no bloqueantes
+  const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+  const withTimeout = async <T,>(p: Promise<T>, ms: number): Promise<T | 'timeout'> => {
+    return await Promise.race([p, delay(ms).then(() => 'timeout' as const)]);
+  };
+
   // Función de auto-login para pruebas
   const autoLogin = async () => {
     try {
       console.log('[AUTO-LOGIN] Intentando login con felipedelacruzgoon@gmail.com');
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: 'felipedelacruzgoon@gmail.com',
-        password: 'Qwertyu'
-      });
+      const loginAttempt = withTimeout(
+        supabase.auth.signInWithPassword({
+          email: 'felipedelacruzgoon@gmail.com',
+          password: 'Qwertyu'
+        }),
+        8000
+      );
+      const loginResult = await loginAttempt as any;
+      if (loginResult === 'timeout') {
+        const msg = 'Tiempo de espera agotado al iniciar sesión.';
+        setAuthWarning(msg);
+        console.log('[AUTO-LOGIN] Timeout en login');
+        return false;
+      }
+      const { data, error } = loginResult as { data: { session: Session | null; user?: any }; error: any };
       if (error) {
         console.log('[AUTO-LOGIN] Login falló:', error.message);
+        setAuthWarning(`Auto-login falló: ${error.message}`);
         // Si el error indica que el usuario no existe o credenciales inválidas, intentar registro
         if (error.message.includes('Invalid login credentials') || error.message.includes('Email not confirmed') || error.message.includes('User not found')) {
           console.log('[AUTO-LOGIN] Intentando registro...');
           const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
             email: 'felipedelacruzgoon@gmail.com',
             password: 'Qwertyu',
-            options: {
-              data: {
-                nombre: 'Felipe'
-              }
-            }
+            options: { data: { nombre: 'Felipe' } }
           });
           if (signUpError) {
             console.log('[AUTO-LOGIN] Registro falló:', signUpError.message);
+            setAuthWarning(`Registro falló: ${signUpError.message}`);
             return false;
           }
           console.log('[AUTO-LOGIN] Registro exitoso, esperando confirmación...');
-          // Después del registro, intentar login nuevamente
-          await delay(2000); // Esperar un poco para que se procese
-          const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-            email: 'felipedelacruzgoon@gmail.com',
-            password: 'Qwertyu'
-          });
-          if (loginError) {
-            console.log('[AUTO-LOGIN] Login después de registro falló:', loginError.message);
+          // Después del registro, intentar login nuevamente tras breve espera
+          await delay(2000);
+          const retry = await withTimeout(
+            supabase.auth.signInWithPassword({ email: 'felipedelacruzgoon@gmail.com', password: 'Qwertyu' }),
+            8000
+          );
+          if (retry === 'timeout') {
+            setAuthWarning('Timeout al reintentar login tras registro.');
             return false;
           }
-          console.log('[AUTO-LOGIN] Login exitoso después de registro');
+          const { data: retryData, error: loginError } = retry as any;
+          if (loginError) {
+            console.log('[AUTO-LOGIN] Login después de registro falló:', loginError.message);
+            setAuthWarning(`Auto-login tras registro falló: ${loginError.message}`);
+            return false;
+          }
+          // Establecer sesión directamente tras login exitoso en móvil/desktop
+          if (retryData?.session) {
+            setSession(retryData.session);
+            setEmailVerified(!!retryData.session.user.email_confirmed_at);
+            await withTimeout(upsertProfileIfNeeded(retryData.session.user) as unknown as Promise<any>, 2500);
+            setAuthLoading(false);
+            console.log('[AUTO-LOGIN] Login exitoso después de registro');
+            return true;
+          }
+          // Si no hay sesión pero tampoco error, depender del listener pero liberar loading en 5s
+          setTimeout(() => setAuthLoading(false), 5000);
           return true;
         }
         return false;
       }
-      console.log('[AUTO-LOGIN] Login exitoso para Felipe');
+      // Éxito directo de login
+      if (data?.session) {
+        console.log('[AUTO-LOGIN] Login exitoso para Felipe');
+        setSession(data.session);
+        setEmailVerified(!!data.session.user.email_confirmed_at);
+        await withTimeout(upsertProfileIfNeeded(data.session.user) as unknown as Promise<any>, 2500);
+        setAuthLoading(false);
+        return true;
+      }
+      // Caso raro: sin error y sin sesión
+      console.log('[AUTO-LOGIN] Login sin error pero sin sesión recibida');
+      setTimeout(() => setAuthLoading(false), 5000);
       return true;
-    } catch (err) {
-      console.log('[AUTO-LOGIN] Error en auto-login:', err);
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      console.log('[AUTO-LOGIN] Error en auto-login:', msg);
+      setAuthWarning(`Error en auto-login: ${msg}`);
       return false;
     }
-  };
-
-  // Utilidades de timeout no bloqueantes
-  const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
-  const withTimeout = async <T,>(p: Promise<T>, ms: number): Promise<T | 'timeout'> => {
-    return await Promise.race([p, delay(ms).then(() => 'timeout' as const)]);
   };
 
   // Evitar relecturas del mismo perfil en ráfaga
@@ -249,7 +287,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setEmailVerified(null);
           setAuthLoading(false);
         }
-        // Si el auto-login fue exitoso, el onAuthStateChange se encargará de actualizar la sesión
+        // Si el auto-login fue exitoso, ya establecimos sesión y authLoading en autoLogin; el onAuthStateChange también actualizará si aplica
       }
     };
 
@@ -272,8 +310,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
     });
 
+    // Fallback de seguridad: si en 12s no se resolvió, liberar loading para no bloquear la UI
+    const safety = setTimeout(() => {
+      if (mounted && authLoading) {
+        setAuthLoading(false);
+        setAuthWarning(prev => prev || 'La autenticación está tardando demasiado. Puedes reintentar.');
+      }
+    }, 12000);
+
     return () => {
       mounted = false;
+      clearTimeout(safety);
       sub.subscription.unsubscribe();
     };
   }, [authReload]);

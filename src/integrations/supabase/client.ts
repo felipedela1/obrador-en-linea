@@ -5,14 +5,29 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://upkjxuvwttqwemsoafcq.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwa2p4dXZ3dHRxd2Vtc29hZmNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUzMTE4OTQsImV4cCI6MjA3MDg4Nzg5NH0.5TUcq1_7xR-1Hl-vXVtHcztT1a9riHiB37poCHCGHHg";
 
+// Almacenamiento seguro para móviles: si localStorage falla (Safari privado / restricciones), usar memoria
+const memoryStore = new Map<string, string>();
+const safeStorage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> = {
+  getItem: (key: string) => {
+    try { return window.localStorage.getItem(key); } catch { return memoryStore.get(key) ?? null; }
+  },
+  setItem: (key: string, value: string) => {
+    try { window.localStorage.setItem(key, value); } catch { memoryStore.set(key, value); }
+  },
+  removeItem: (key: string) => {
+    try { window.localStorage.removeItem(key); } catch { memoryStore.delete(key); }
+  }
+};
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    // Usar la clave por defecto sb-... para evitar duplicidades con 'obrador-auth'
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    storage: safeStorage,
+    // storageKey opcional, mantener el por defecto sb-<ref>-auth-token
   }
 });
