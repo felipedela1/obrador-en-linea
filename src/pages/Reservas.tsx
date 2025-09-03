@@ -138,23 +138,23 @@ const Reservas = () => {
     if (Object.keys(cart).length === 0) return;
     setSubmitting(true);
     try {
-      // Bloquear creación entre 00:00 y 07:00
-      const now = new Date();
-      const hour = now.getHours();
-      if (hour < 7) {
-        toast({ title: "Fuera de horario", description: "Las reservas se pueden crear de 07:00 a 24:00.", variant: "destructive" });
-        setSubmitting(false);
-        return;
-      }
+      //// Bloquear creación entre 00:00 y 07:00
+      //const now = new Date();
+      //const hour = now.getHours();
+      //if (hour < 7) {
+      //  toast({ title: "Fuera de horario", description: "Las reservas se pueden crear de 07:00 a 24:00.", variant: "destructive" });
+      //  setSubmitting(false);
+      //  return;
+      //}
 
       // Asegurar que la fecha sea al menos mañana
-      const selected = new Date(`${fecha}T00:00:00`);
-      const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      if (selected < tomorrowStart) {
-        toast({ title: "Fecha inválida", description: "La fecha de recogida debe ser el día siguiente.", variant: "destructive" });
-        setSubmitting(false);
-        return;
-      }
+      //const selected = new Date(`${fecha}T00:00:00`);
+      //const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      //if (selected < tomorrowStart) {
+      //  toast({ title: "Fecha inválida", description: "La fecha de recogida debe ser el día siguiente.", variant: "destructive" });
+      //  setSubmitting(false);
+      //  return;
+      //}
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { toast({ title: "No autenticado", description: "Inicia sesión", variant: "destructive" }); setSubmitting(false); return; }
