@@ -50,13 +50,17 @@ const Reservas = () => {
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   };
+  const getTodayStr = () => {
+    const now = new Date();
+    return getLocalDateStr(now);
+  };
   const getTomorrowStr = () => {
     const now = new Date();
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     return getLocalDateStr(tomorrow);
   };
 
-  const [fecha, setFecha] = useState(() => getTomorrowStr());
+  const [fecha, setFecha] = useState(() => getTodayStr());
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState<AvailableProduct[]>([]);
   const [cart, setCart] = useState<Record<string, CartItem>>({});
@@ -223,7 +227,7 @@ const Reservas = () => {
                   </div>
                   <div className="relative flex-1 min-w-[140px]">
                     <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600 w-4 h-4" />
-                    <Input type="date" value={fecha} onChange={e => setFecha(e.target.value)} min={getTomorrowStr()} className="pl-12 w-full bg-white/60 backdrop-blur text-sm" aria-label="Fecha de recogida" />
+                    <Input type="date" value={fecha} onChange={e => setFecha(e.target.value)} min={getTodayStr()} className="pl-12 w-full bg-white/60 backdrop-blur text-sm" aria-label="Fecha de recogida" />
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 items-center justify-end w-full md:w-auto mt-2 md:mt-0">
